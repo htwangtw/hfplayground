@@ -1,4 +1,0 @@
-datasets  # hugging face datasets
-numpy
-pandas
-pyarrow

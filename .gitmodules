@@ -1,0 +1,3 @@
+[submodule "BrainLM"]
+	path = BrainLM
+	url = git@github.com:vandijklab/BrainLM.git

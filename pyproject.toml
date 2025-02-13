@@ -4,4 +4,21 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "datasets>=3.2.0",
+    "huggingface-hub[hf-transfer]>=0.28.1",
+    "ipython>=8.32.0",
+    "matplotlib>=3.10.0",
+    "nilearn>=0.11.1",
+    "numpy>=2.2.2",
+    "pandas>=2.2.3",
+    "pyarrow>=19.0.0",
+    "seaborn>=0.13.2",
+    "torch>=2.6.0",
+    "transformers>=4.48.3",
+]
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
