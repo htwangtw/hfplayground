@@ -8,6 +8,7 @@ dependencies = [
     "datasets>=3.2.0",
     "huggingface-hub[hf-transfer]>=0.28.1",
     "ipython>=8.32.0",
+    "jupyter>=1.1.1",
     "matplotlib>=3.10.0",
     "nilearn>=0.11.1",
     "numpy>=2.2.2",
