@@ -7,7 +7,14 @@ import os
 from nilearn._utils import check_niimg
 import numpy as np
 
-def preprocess_developmental_dataset(sourcedata_dir, processed_dir):
+def preprocess_development_dataset(sourcedata_dir, processed_dir):
+    """Download and preprocess the nilearn development dataset.
+
+    post fmriprep processing details
+    Denoising: Simple strategy with 6 motion parameters.
+    Scaling: None.
+    Mask: generic MNI152 whole brain mask.
+    """
     development_dataset = datasets.fetch_development_fmri(data_dir=sourcedata_dir)
 
     mni_mask = datasets.fetch_icbm152_2009()['mask']
@@ -40,6 +47,5 @@ def downsample_for_tutorial(nii_file, output_dir):
         force_resample=True,
         copy_header=True
     )
-    downsample_data.set_data_dtype('int8')
     downsample_data.to_filename(Path(output_dir) / f'downsample_{fname}')
     return Path(output_dir) / f'downsample_{fname}'

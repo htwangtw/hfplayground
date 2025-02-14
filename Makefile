@@ -10,7 +10,7 @@ download_models:
 
 download_data: 
 	mkdir -p ./data/interim/development_fmri
-	python -c 'from hfplayground.data import preprocess_developmental_dataset; preprocess_developmental_dataset("data/external", "data/interim/development_fmri")'
+	python -c 'from hfplayground.data import preprocess_development_dataset; preprocess_development_dataset("data/external", "data/interim/development_fmri")'
 
 downsample_atlas: ./data/interim/development_fmri/*.nii.gz
 	mkdir -p ./hfplayground/data/development_fmri
