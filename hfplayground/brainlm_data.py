@@ -15,7 +15,7 @@ import glob
 from importlib.resources import files
 
 # hard cpded for this tutorial
-ATLAS_FILE = 'data/development_fmri/downsample_A424+4mm.nii.gz'
+ATLAS_FILE = 'data/development_fmri/downsample_A424+2mm.nii.gz'
 
 def convert_fMRIvols_to_A424(data_path, output_path):
     """
