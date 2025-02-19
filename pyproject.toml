@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "datasets>=3.2.0",
     "huggingface-hub[hf-transfer]>=0.28.1",
+    "invoke>=2.2.0",
     "ipython>=8.32.0",
     "jupyter>=1.1.1",
     "matplotlib>=3.10.0",
