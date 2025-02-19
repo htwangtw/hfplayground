@@ -4,6 +4,10 @@ For learning and testing various hugging face stuff through BrainLM.
 
 Here I am using the nilearn test dataset to walk through BrainLM fine tuning and downstream tutorial.
 
+The aim is to use the code as-is as much as possible.
+
+Later we might try to improve the process....
+
 ## Run this project
 
 Please use [`uv`](https://docs.astral.sh/uv/) to install this project for the smoothest experience.
@@ -33,18 +37,7 @@ or prepend any command you want to run with `uv run` to activate the environment
 
 ## Download models and data
 
-With `uv`
-```
-uv run invoke models
-uv run invoke data
-```
-
-Or with your virtual environment
-```
-source .venv/bin/activate
-invoke models
-invoke data
-```
+Check out `uv run invoke --list` for the commands and documentations.
 
 ## Other unrelated notes
 
