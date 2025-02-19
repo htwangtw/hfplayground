@@ -90,7 +90,7 @@ def convert_fMRIvols_to_A424(data_path, output_path):
         else:
             print(f"File {f} not a nifti file. Skipping...")
 
-def convert_to_arrow_datasets(args, save_path):
+def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, compute_Stats=True):
     """
     This function accepts a arguments object containing the filepath of a directory containing
      dat files for patient fmri recordings from the UK BioBank dataset.
@@ -112,7 +112,7 @@ def convert_to_arrow_datasets(args, save_path):
     # --- Train/val/test Split ---#
     print("FMRI Data Arrow Conversion Starting...")
     # Assuming that filename is patient ID, thus each file with unique name is a separate patient.
-    all_dat_files = os.listdir(args["uk_biobank_dir"])
+    all_dat_files = os.listdir(uk_biobank_dir)
     all_dat_files = [filename for filename in all_dat_files if ".dat" in filename]
     try:
         all_dat_files.remove("A424_Coordinates.dat")
@@ -124,33 +124,32 @@ def convert_to_arrow_datasets(args, save_path):
     train_split_idx = len(all_dat_files)
     train_files = all_dat_files[:train_split_idx]
     sh_35 = 0
-    sh_less_200 = 0
+    sh_less = 0
     for idx,file in enumerate(tqdm(all_dat_files)):
         try:
-            sample = np.loadtxt(os.path.join(args["uk_biobank_dir"],file)).T #490, 424
-            if sample.shape[0] < 200:
+            sample = np.loadtxt(os.path.join(uk_biobank_dir, file)).T #490, 424
+            if sample.shape[0] < ts_min_length:
                 print(sample.shape, idx, "ommitted due to insufficient data")
-                sh_less_200 += 1
+                sh_less += 1
             else:
                 sh_35 += 1
             # print(sample.shape)
         except UnicodeDecodeError:
             print(file)
 
+    print(f"Not processing {sh_less} files due to insufficient fMRI data")
 
-    print(f"Not processing {sh_less_200} files due to insufficient fMRI data")
-    compute_Stats=True
     if compute_Stats:
         num_files = sh_35 #len(all_dat_files_rs) + len(all_dat_files_tf)
         all_stds = np.zeros([num_files, 424])
-        all_data = np.empty([num_files*200, 424])
+        all_data = np.empty([num_files*ts_min_length, 424])
         for idx,file in enumerate(tqdm(train_files)):
             if idx == num_files:
                 break
             # if idx%2000==0:
             #     print('idx: {}, next file: {}'.format(idx,file))
             try:
-                sample = np.loadtxt(os.path.join(args["uk_biobank_dir"],file)) #490, 424
+                sample = np.loadtxt(os.path.join(uk_biobank_dir,file)) #490, 424
                 # print(sample.shape)
             except UnicodeDecodeError:
                 print(file)
@@ -162,10 +161,10 @@ def convert_to_arrow_datasets(args, save_path):
             idx_sample=idx
 
 
-            if sample.shape[0] < 200:
+            if sample.shape[0] < ts_min_length:
                 continue
             try:
-                all_data[idx*200:(idx+1)*200,:] = sample[:200,:]
+                all_data[idx*ts_min_length:(idx+1)*ts_min_length,:] = sample[:ts_min_length,:]
             except ValueError:
                 print(sample.shape)
                 print('idx: {}, idx_sample: {}'.format(idx,idx_sample))
@@ -188,9 +187,9 @@ def convert_to_arrow_datasets(args, save_path):
     voxel_minimums_train = []
 
     for filename in tqdm(train_files, desc="Getting normalization stats"):
-        dat_arr = np.loadtxt(os.path.join(args["uk_biobank_dir"], filename)).astype(
+        dat_arr = np.loadtxt(os.path.join(uk_biobank_dir, filename)).astype(
             np.float32
-        )
+        ).T
         #assert (
         #    np.min(dat_arr) >= 0
         #), "Minimum of patient recording is a negative number, check normalization"
@@ -204,7 +203,7 @@ def convert_to_arrow_datasets(args, save_path):
         voxel_maximums_train.append(dat_arr_max)
         voxel_minimums_train.append(dat_arr_min)
 
-    voxel_maximums_train = np.stack(voxel_maximums_train, axis=0)
+    voxel_maximums_train = np.stack(voxel_maximums_train, axis=0)  # stack in time dimension
     voxel_minimums_train = np.stack(voxel_minimums_train, axis=0)
     global_per_voxel_train_max = np.max(voxel_maximums_train, axis=0)
     global_per_voxel_train_min = np.min(voxel_minimums_train, axis=0)
@@ -226,11 +225,11 @@ def convert_to_arrow_datasets(args, save_path):
     }
 
     for filename in tqdm(train_files, desc="Normalizing Data"):
-        dat_arr = np.loadtxt(os.path.join(args["uk_biobank_dir"], filename)).astype(
+        dat_arr = np.loadtxt(os.path.join(uk_biobank_dir, filename)).astype(
             np.float32
         ).T
 
-        if dat_arr.shape[0] < 200:
+        if dat_arr.shape[0] < ts_min_length:
             continue
 
         if dat_arr.shape[0] > 424:
@@ -337,7 +336,7 @@ def convert_to_arrow_datasets(args, save_path):
     )
 
     # --- Save Brain Region Coordinates Into Another Arrow Dataset ---#
-    coords_dat = np.loadtxt(os.path.join("/home/mt2286/project/BrainLM/toolkit/atlases/", "A424_Coordinates.dat")).astype(np.float32)
+    coords_dat = np.loadtxt(files('hfplayground') / "data/brainlm/atlases/A424_Coordinates.dat").astype(np.float32)
     coords_pd = pd.DataFrame(coords_dat, columns=["Index", "X", "Y", "Z"])
     coords_dataset = Dataset.from_pandas(coords_pd)
     coords_dataset.save_to_disk(

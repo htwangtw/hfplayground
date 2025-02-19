@@ -23,7 +23,8 @@ git submodule update --init --recursive
 
 With `uv`
 ```
-make env 
+uv venv
+uv sync
 ```
 
 You can either activate the environment with `source .venv/bin/activate` and use this environment in the conventional python way,
@@ -34,15 +35,15 @@ or prepend any command you want to run with `uv run` to activate the environment
 
 With `uv`
 ```
-uv run make download_models
-uv run make download_data
+uv run invoke models
+uv run invoke data
 ```
 
 Or with your virtual environment
 ```
 source .venv/bin/activate
-make download_models
-make download_data
+invoke models
+invoke data
 ```
 
 ## Other unrelated notes
