@@ -35,15 +35,17 @@ or prepend any command you want to run with `uv run` to activate the environment
 
 With `uv`
 ```
-uv run invoke models
-uv run invoke data
+uv run invoke prepare.models
+uv run invoke prepare.data
 ```
 
 Or with your virtual environment
 ```
 source .venv/bin/activate
-invoke models
-invoke data
+invoke prepare.models
+invoke prepare.atlas
+invoke prepare.data
+invoke prepare.timeseries
 ```
 
 ## Other unrelated notes

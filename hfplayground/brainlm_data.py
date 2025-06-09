@@ -22,6 +22,9 @@ def convert_fMRIvols_to_A424(data_path, output_path):
     This function takes in a folder of preprocessed fMRI volumes (.nii.gz), extracts A424 parcels, and saves these
     timeseries data to .dat files.
 
+    This is currently directly take from the BrainLM code base and the normalisation process will require further investigation.
+    I am letting this slide and will revisit once the fine tuning workflow works.
+
     Inputs:
         data_path: Directory of fMRI volumes
         output_path: Where to store the output parcellated time series (.dat files)
