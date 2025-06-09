@@ -4,6 +4,10 @@ For learning and testing various hugging face stuff through BrainLM.
 
 Here I am using the nilearn test dataset to walk through BrainLM fine tuning and downstream tutorial.
 
+The aim is to use the code as-is as much as possible.
+
+Later we might try to improve the process....
+
 ## Run this project
 
 Please use [`uv`](https://docs.astral.sh/uv/) to install this project for the smoothest experience.
@@ -47,6 +51,7 @@ invoke prepare.atlas
 invoke prepare.data
 invoke prepare.timeseries
 ```
+Check out `uv run invoke --list` for the commands and documentations.
 
 ## Other unrelated notes
 
