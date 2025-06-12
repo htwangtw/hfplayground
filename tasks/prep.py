@@ -9,6 +9,7 @@ def models(c):
 
 @invoke.task
 def data(c):
+    c.run("mkdir -p ./data/interim/development_fmri")
     preprocess_development_dataset("data/external", "data/interim/development_fmri")
 
 @invoke.task
