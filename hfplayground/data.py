@@ -20,15 +20,15 @@ def preprocess_development_dataset(sourcedata_dir, processed_dir):
     mni_mask = datasets.fetch_icbm152_2009()['mask']
     mni_mask = downsample_for_tutorial(mni_mask, '/tmp/')
     # quick preprocessing
-    # standardization is done at the time windown creation stage
-    masker = NiftiMasker(mask_img=mni_mask, standardize=False)
+    # standardization is done at the time window creation stage
+    masker = NiftiMasker(mask_img=mni_mask, smoothing_fwhm=8, standardize=False)
     for func in tqdm(development_dataset['func'], desc="Denoising data..."):
         conf, sm = load_confounds_strategy(img_files=func, denoise_strategy='simple', motion='basic')
         ts = masker.fit_transform(func, confounds=conf, sample_mask=sm)
         nii = masker.inverse_transform(ts)
         del ts
         nii.to_filename(processed_dir)
-        nii_name = func.split('/')[-1].replace('preproc', 'preprocSimple')
+        nii_name = func.split('/')[-1].replace('preproc', 'preprocSimpleFwhm8mm')
         nii.to_filename(f"{processed_dir}/{nii_name}")
         del nii
     return None
