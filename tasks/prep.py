@@ -9,6 +9,7 @@ def models(c):
 
 @invoke.task
 def data(c):
+    c.run("mkdir -p ./data/interim/development_fmri")
     preprocess_development_dataset("data/external", "data/interim/development_fmri")
 
 @invoke.task
@@ -21,5 +22,6 @@ def atlas(c):
 def timeseries(c):
     c.run("mkdir -p ./data/interim/brainlm_a424")
     convert_fMRIvols_to_A424("./data/interim/development_fmri/", "./data/interim/brainlm_a424")
+    c.run("mkdir -p ./data/processed/brainlm_a424")
     convert_to_arrow_datasets("./data/interim/brainlm_a424", "data/processed/brainlm_a424", ts_min_length=160, compute_Stats=True)
 
