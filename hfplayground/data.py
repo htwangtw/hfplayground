@@ -30,7 +30,7 @@ def preprocess_development_dataset(sourcedata_dir, processed_dir):
     # Not smoothing here as the data is heavily downsampled
     masker = NiftiMasker(mask_img=mni_mask, smoothing_fwhm=None, standardization=True)
     for func in tqdm(development_dataset['func'], desc="Denoising data..."):
-        conf, sm = load_confounds_strategy(img_files=func, denoise_strategy='simple', motion='basic')
+        conf, sm = load_confounds_strategy(img_files=func, denoise_strategy='simple', motion='basic', global_signal='basic')
         ts = masker.fit_transform(func, confounds=conf, sample_mask=sm)
         nii = masker.inverse_transform(ts)
         del ts
