@@ -335,7 +335,7 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
 
     arrow_train_dataset = Dataset.from_dict(train_dataset_dict)
     arrow_train_dataset.save_to_disk(
-        dataset_path=os.path.join(save_path, "train")
+        dataset_path=os.path.join(save_path, "fmri_development.arrow")
     )
 
     # --- Save Brain Region Coordinates Into Another Arrow Dataset ---#
@@ -343,6 +343,6 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
     coords_pd = pd.DataFrame(coords_dat, columns=["Index", "X", "Y", "Z"])
     coords_dataset = Dataset.from_pandas(coords_pd)
     coords_dataset.save_to_disk(
-        dataset_path=os.path.join(save_path, "Brain_Region_Coordinates")
+        dataset_path=os.path.join(save_path, "brainregion_coordinates.arrow")
     )
     print("Done.")
