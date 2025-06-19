@@ -66,7 +66,7 @@ def preprocess_development_dataset(sourcedata_dir, processed_dir, arrow_dir=None
         seg_ts = atlas_masker.fit_transform(f"{processed_dir}/{nii_name}")
         seg_ts = pd.DataFrame(seg_ts, columns=[int(l) for l in atlas_masker.labels_])
         # they filled missing values with 0, so we do the same..... this is bad
-        seg_ts = seg_ts.reindex(columns=complete_labels, fill_value=0)
+        seg_ts = seg_ts.reindex(columns=complete_labels, fill_value=np.nan)
         seg_ts.to_csv(Path(f"{processed_dir}_gigaconnectome_a424") / ts_filename, sep='\t', index=False)
         del seg_ts
 
@@ -92,8 +92,8 @@ def preprocess_development_dataset(sourcedata_dir, processed_dir, arrow_dir=None
         scaler = RobustScaler()
         seg_ts_robustscaler = scaler.fit_transform(seg_ts)
         participant_id = file_path.stem.split('_')[0]
-        dataset_dict["raw_timeseries"].append(seg_ts)
-        dataset_dict["robustscaler_timeseries"].append(seg_ts_robustscaler)
+        dataset_dict["raw_timeseries"].append(seg_ts.T)
+        dataset_dict["robustscaler_timeseries"].append(seg_ts_robustscaler.T)
         dataset_dict["filename"].append(str(file_path.name))
         dataset_dict["participant_id"].append(participant_id)
         for col in convert_data:

@@ -57,8 +57,8 @@ num_voxels = 424  # this should be atlas....
 # multiple train modes (auto-encoder, causal attention, predict last, etc)
 model.config.train_mode = "auto_encode"
 
-coords_ds = load_from_disk("data/processed/brainlm_a424/Brain_Region_Coordinates")
-train_ds = load_from_disk("data/processed/brainlm_a424/train")
+coords_ds = load_from_disk("data/processed/development_fmri_brainlm_a424/brainregion_coordinates.arrow")
+train_ds = load_from_disk("data/processed/development_fmri_brainlm_a424/fmri_development.arrow")
 
 # split = "train"
 # used_ds = dataset_split[split]
@@ -134,13 +134,13 @@ with torch.no_grad():
         embedding = encoder_output.last_hidden_state[:,1:,:]
         all_embeddings.append(embedding.detach().cpu().numpy())
         list_cls_tokens.append(cls_token.detach().cpu().numpy())
-        all_index.append(recording["labels"].detach().numpy())
+        # all_index.append(recording["labels"].detach().numpy())
         attn_cls_token = get_attention_cls_token(encoder_output.attentions)
         list_attn_cls_tokens.append(attn_cls_token)
 print(all_embeddings[0].shape)
 
 # save results
-preds_name = f"outputs/{params}_cls_token.npy"
+preds_name = f"outputs/{params}_cls_token_brainlm.npy"
 print("Saving inference results to: ", preds_name)
 np.save(preds_name, list_attn_cls_tokens)
 
@@ -158,15 +158,15 @@ elif aggregation_mode == "max":
 
 
 print(all_embeds.shape)
-all_index = np.concatenate(all_index, axis=0)
+# all_index = np.concatenate(all_index, axis=0)
 
-# check if dataloader messed up order in any way
-if not np.all(all_index[:-1] <= all_index[1:]):
-    # reorder everything
-    print("reordering")
-    all_embeds = all_embeds[all_index, :]
+# # check if dataloader messed up order in any way
+# if not np.all(all_index[:-1] <= all_index[1:]):
+#     # reorder everything
+#     print("reordering")
+#     all_embeds = all_embeds[all_index, :]
 
-np.save(f"outputs/{aggregation_mode}_all_{length}recordinglength.npy", all_embeds)
+np.save(f"outputs/{aggregation_mode}_all_{length}recordinglength_brainlm.npy", all_embeds)
 
 
 # extract patch tokens with data
@@ -197,7 +197,7 @@ if aggregation_mode != "cls":
         all_sum_embeddings = [e.max(axis=1) for e in all_embeddings]
         all_embeds = np.concatenate(all_sum_embeddings, axis=0)
 
-    np.save(f"outputs/{aggregation_mode}_only_data_{length}recordinglength.npy", all_embeds)
+    np.save(f"outputs/{aggregation_mode}_only_data_{length}recordinglength_brainlm.npy", all_embeds)
 
 # Save raw recordings as well
 all_recordings = []
@@ -209,6 +209,6 @@ for idx, batch in enumerate(tqdm(train_ds)):
 all_recordings = np.vstack(all_recordings)
 all_recordings.shape
 
-np.save(f"outputs/all_recordings_{length}length.npy", all_recordings)
+np.save(f"outputs/all_recordings_{length}length_brainlm.npy", all_recordings)
 
 # BrainLM/toolkit/BrainLM_Tutorial.ipynb plotting with PCA etc
