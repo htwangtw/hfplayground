@@ -88,13 +88,13 @@ def preprocess_development_dataset(sourcedata_dir, processed_dir, arrow_dir=None
         dataset_dict[col] = []
 
     for file_path in tqdm(timeseries_files, desc="convert to arrow"):
-        seg_ts = pd.read_csv(file_path, sep='\t').values.astype(np.float32)
+        seg_ts = pd.read_csv(file_path, sep='\t', header=0).values.astype(np.float32)
         # apply robust scaling to the time series
         scaler = RobustScaler()
         seg_ts_robustscaler = scaler.fit_transform(seg_ts)
         participant_id = file_path.stem.split('_')[0]
-        dataset_dict["raw_timeseries"].append(seg_ts.T[:ts_min_length, :])
-        dataset_dict["robustscaler_timeseries"].append(seg_ts_robustscaler.T[:ts_min_length, :])
+        dataset_dict["raw_timeseries"].append(seg_ts[:ts_min_length, :])
+        dataset_dict["robustscaler_timeseries"].append(seg_ts_robustscaler[:ts_min_length, :])
         dataset_dict["filename"].append(str(file_path.name))
         dataset_dict["participant_id"].append(participant_id)
         for col in convert_data:
