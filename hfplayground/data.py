@@ -12,13 +12,14 @@ from sklearn.preprocessing import RobustScaler
 import nibabel as nib
 
 seg_name = 'A424+2mm'
-ATLAS_FILE = 'data/development_fmri/downsample_A424+2mm.nii.gz'
+ATLAS_FILE = f'data/development_fmri/downsample_{seg_name}.nii.gz'
 denoise_strategy_name = 'simple+gsr'
 denoise_strategy = {
     'denoise_strategy': 'simple',
     'motion': 'basic',
     'global_signal': 'basic',
 }
+ts_min_length = 160
 
 def preprocess_development_dataset(sourcedata_dir, processed_dir, arrow_dir=None):
     """Download and preprocess the nilearn development dataset to arrow dataset.
@@ -92,8 +93,8 @@ def preprocess_development_dataset(sourcedata_dir, processed_dir, arrow_dir=None
         scaler = RobustScaler()
         seg_ts_robustscaler = scaler.fit_transform(seg_ts)
         participant_id = file_path.stem.split('_')[0]
-        dataset_dict["raw_timeseries"].append(seg_ts.T)
-        dataset_dict["robustscaler_timeseries"].append(seg_ts_robustscaler.T)
+        dataset_dict["raw_timeseries"].append(seg_ts.T[:ts_min_length, :])
+        dataset_dict["robustscaler_timeseries"].append(seg_ts_robustscaler.T[:ts_min_length, :])
         dataset_dict["filename"].append(str(file_path.name))
         dataset_dict["participant_id"].append(participant_id)
         for col in convert_data:
