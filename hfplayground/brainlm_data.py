@@ -4,14 +4,11 @@
 import numpy as np
 import nibabel as nib
 import os
-import argparse
-from math import ceil
-import pickle
+from pathlib import Path
 
 import pandas as pd
-from datasets import Dataset, concatenate_datasets
+from datasets import Dataset
 from tqdm import tqdm
-import glob
 from importlib.resources import files
 
 # hard cpded for this tutorial
@@ -130,7 +127,7 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
     sh_less = 0
     for idx,file in enumerate(tqdm(all_dat_files)):
         try:
-            sample = np.loadtxt(os.path.join(uk_biobank_dir, file)).T #490, 424
+            sample = np.loadtxt(os.path.join(uk_biobank_dir, file)).T #number of time point, number of parcels
             if sample.shape[0] < ts_min_length:
                 print(sample.shape, idx, "ommitted due to insufficient data")
                 sh_less += 1
@@ -152,11 +149,10 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
             # if idx%2000==0:
             #     print('idx: {}, next file: {}'.format(idx,file))
             try:
-                sample = np.loadtxt(os.path.join(uk_biobank_dir,file)) #490, 424
+                sample = np.loadtxt(os.path.join(uk_biobank_dir,file)) #time, parcel
                 # print(sample.shape)
             except UnicodeDecodeError:
                 print(file)
-            # sample = np.loadtxt(os.path.join(uk_biobank_dir_rs, file, 'rfMRI_REST','rfMRI_REST_Atlas_MSMAll_hp2000_clean_MGTR_zscored_HCP_MMP_BNAC.dat')).astype(np.float32).T
             sample_mean = sample.mean(axis=0, keepdims=True)
             sample_mean = sample_mean[None,:].repeat(sample.shape[0],1).squeeze()
             sample = sample - sample_mean
@@ -192,7 +188,7 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
     for filename in tqdm(train_files, desc="Getting normalization stats"):
         dat_arr = np.loadtxt(os.path.join(uk_biobank_dir, filename)).astype(
             np.float32
-        ).T
+        )
         #assert (
         #    np.min(dat_arr) >= 0
         #), "Minimum of patient recording is a negative number, check normalization"
@@ -201,8 +197,8 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
         if np.min(dat_arr) < global_train_min:
             global_train_min = np.min(dat_arr)
 
-        dat_arr_max = np.max(dat_arr, axis=1)
-        dat_arr_min = np.min(dat_arr, axis=1)
+        dat_arr_max = np.max(dat_arr, axis=0)
+        dat_arr_min = np.min(dat_arr, axis=0)
         voxel_maximums_train.append(dat_arr_max)
         voxel_minimums_train.append(dat_arr_min)
 
@@ -224,19 +220,22 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
         "Subtract_Mean_Divide_Global_STD_Normalized_Recording": [],
         "Subtract_Mean_Divide_Global_99thPercent_Normalized_Recording": [],
         "Filename": [],
-        "Patient ID": [],
+        "participant_id": [],
     }
+    # Load phenotype data
+    phenotype = pd.read_csv("data/external/development_fmri/development_fmri/participants.tsv", index_col='participant_id', sep='\t')
+    convert_data = ['Age', 'Gender', 'AgeGroup', 'Child_Adult']
+    for col in convert_data:
+        train_dataset_dict[col] = []
 
     for filename in tqdm(train_files, desc="Normalizing Data"):
+        participant_id = Path(filename).stem.split('_')[0]
         dat_arr = np.loadtxt(os.path.join(uk_biobank_dir, filename)).astype(
             np.float32
-        ).T
+        )
 
         if dat_arr.shape[0] < ts_min_length:
             continue
-
-        if dat_arr.shape[0] > 424:
-            dat_arr = dat_arr[:350, :]
 
         global_norm_dat_arr = np.copy(dat_arr)
         per_patient_all_voxels_norm_dat_arr = np.copy(dat_arr)
@@ -244,7 +243,7 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
         per_voxel_all_patient_norm_dat_arr = np.copy(dat_arr)
         recording_mean_subtracted = np.copy(dat_arr)
         recording_mean_subtracted2 = np.copy(dat_arr)
-        recording_mean_subtracted3 = np.copy(dat_arr.T)
+        recording_mean_subtracted3 = np.copy(dat_arr)
         global_std = 41.44047  # calculated in normalization notebook
         _99th_percentile = 111.13143061224855  # calculated externally
 
@@ -302,7 +301,6 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
             )
 
         #Voxelwise Robust Scaler Normalization
-        recording_mean_subtracted3 = recording_mean_subtracted3 - recording_mean_subtracted3.mean(axis=0)
         recording_mean_subtracted3 = (recording_mean_subtracted3 - data_median_per_voxel / IQR)
 
         _99th_global_recording = np.divide(recording_mean_subtracted2, _99th_percentile)
@@ -331,18 +329,20 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
             "Subtract_Mean_Divide_Global_99thPercent_Normalized_Recording"
         ].append(_99th_global_recording)
         train_dataset_dict["Filename"].append(filename)
-        train_dataset_dict["Patient ID"].append(filename.split(".dat")[-1])
+        train_dataset_dict["participant_id"].append(participant_id)
+        for col in convert_data:
+            train_dataset_dict[col].append(phenotype.loc[participant_id, col])
 
     arrow_train_dataset = Dataset.from_dict(train_dataset_dict)
     arrow_train_dataset.save_to_disk(
-        dataset_path=os.path.join(save_path, "train")
+        dataset_path=os.path.join(save_path, "fmri_development.arrow")
     )
 
-    # --- Save Brain Region Coordinates Into Another Arrow Dataset ---#
-    coords_dat = np.loadtxt(files('hfplayground') / "data/brainlm/atlases/A424_Coordinates.dat").astype(np.float32)
-    coords_pd = pd.DataFrame(coords_dat, columns=["Index", "X", "Y", "Z"])
-    coords_dataset = Dataset.from_pandas(coords_pd)
-    coords_dataset.save_to_disk(
-        dataset_path=os.path.join(save_path, "Brain_Region_Coordinates")
-    )
+    # # --- Save Brain Region Coordinates Into Another Arrow Dataset ---#
+    # coords_dat = np.loadtxt(files('hfplayground') / "data/brainlm/atlases/A424_Coordinates.dat").astype(np.float32)
+    # coords_pd = pd.DataFrame(coords_dat, columns=["Index", "X", "Y", "Z"])
+    # coords_dataset = Dataset.from_pandas(coords_pd)
+    # coords_dataset.save_to_disk(
+    #     dataset_path=os.path.join(save_path, "brainregion_coordinates.arrow")
+    # )
     print("Done.")

@@ -5,6 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "setuptools",
+    "ninja",
+    "packaging",
     "datasets>=3.2.0",
     "huggingface-hub[hf-transfer]>=0.28.1",
     "invoke>=2.2.0",
@@ -17,9 +20,22 @@ dependencies = [
     "pyarrow>=19.0.0",
     "seaborn>=0.13.2",
     "torch>=2.6.0",
+    "torchvision",
+    "torchaudio",
     "transformers>=4.48.3",
 ]
 
+[project.optional-dependencies]
+build = ["torch", "setuptools", "packaging"]
+compile = ["flash_attn<2.8.0"]
+
+[tool.uv]
+no-build-isolation-package = ["flash_attn"]
+
+[[tool.uv.dependency-metadata]]
+name = "flash-attn"
+version="2.7.4"
+requires-dist = ["torch", "einops"]
 
 [build-system]
 requires = ["hatchling"]
