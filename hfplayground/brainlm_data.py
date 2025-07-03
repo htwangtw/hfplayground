@@ -4,15 +4,11 @@
 import numpy as np
 import nibabel as nib
 import os
-import argparse
-from math import ceil
-import pickle
 from pathlib import Path
 
 import pandas as pd
-from datasets import Dataset, concatenate_datasets
+from datasets import Dataset
 from tqdm import tqdm
-import glob
 from importlib.resources import files
 
 # hard cpded for this tutorial
@@ -224,7 +220,7 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
         "Subtract_Mean_Divide_Global_STD_Normalized_Recording": [],
         "Subtract_Mean_Divide_Global_99thPercent_Normalized_Recording": [],
         "Filename": [],
-        "Patient ID": [],
+        "participant_id": [],
     }
     # Load phenotype data
     phenotype = pd.read_csv("data/external/development_fmri/development_fmri/participants.tsv", index_col='participant_id', sep='\t')
@@ -240,9 +236,6 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
 
         if dat_arr.shape[0] < ts_min_length:
             continue
-
-        if dat_arr.shape[0] > ts_min_length:
-            dat_arr = dat_arr[:ts_min_length, :]
 
         global_norm_dat_arr = np.copy(dat_arr)
         per_patient_all_voxels_norm_dat_arr = np.copy(dat_arr)
@@ -336,7 +329,7 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
             "Subtract_Mean_Divide_Global_99thPercent_Normalized_Recording"
         ].append(_99th_global_recording)
         train_dataset_dict["Filename"].append(filename)
-        train_dataset_dict["Patient ID"].append(participant_id)
+        train_dataset_dict["participant_id"].append(participant_id)
         for col in convert_data:
             train_dataset_dict[col].append(phenotype.loc[participant_id, col])
 
@@ -345,11 +338,11 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
         dataset_path=os.path.join(save_path, "fmri_development.arrow")
     )
 
-    # --- Save Brain Region Coordinates Into Another Arrow Dataset ---#
-    coords_dat = np.loadtxt(files('hfplayground') / "data/brainlm/atlases/A424_Coordinates.dat").astype(np.float32)
-    coords_pd = pd.DataFrame(coords_dat, columns=["Index", "X", "Y", "Z"])
-    coords_dataset = Dataset.from_pandas(coords_pd)
-    coords_dataset.save_to_disk(
-        dataset_path=os.path.join(save_path, "brainregion_coordinates.arrow")
-    )
+    # # --- Save Brain Region Coordinates Into Another Arrow Dataset ---#
+    # coords_dat = np.loadtxt(files('hfplayground') / "data/brainlm/atlases/A424_Coordinates.dat").astype(np.float32)
+    # coords_pd = pd.DataFrame(coords_dat, columns=["Index", "X", "Y", "Z"])
+    # coords_dataset = Dataset.from_pandas(coords_pd)
+    # coords_dataset.save_to_disk(
+    #     dataset_path=os.path.join(save_path, "brainregion_coordinates.arrow")
+    # )
     print("Done.")

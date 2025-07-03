@@ -1,6 +1,6 @@
 import invoke
 from nilearn.datasets import fetch_development_fmri
-from hfplayground.data import preprocess_development_dataset, downsample_for_tutorial
+from hfplayground.data import preprocess_development_dataset, downsample_for_tutorial, brain_region_coord_to_arrow
 from hfplayground.brainlm_data import convert_fMRIvols_to_A424, convert_to_arrow_datasets
 
 @invoke.task
@@ -13,6 +13,7 @@ def atlas(c):
     c.run("mkdir -p ./hfplayground/data/development_fmri")
     downsample_for_tutorial("hfplayground/data/brainlm/atlases/A424+4mm.nii.gz", "hfplayground/data/development_fmri")
     downsample_for_tutorial("hfplayground/data/brainlm/atlases/A424+2mm.nii.gz", "hfplayground/data/development_fmri")
+    brain_region_coord_to_arrow()
 
 @invoke.task
 def data(c):

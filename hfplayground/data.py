@@ -78,6 +78,7 @@ def preprocess_development_dataset(sourcedata_dir, processed_dir, arrow_dir=None
     convert_data = ['Age', 'Gender', 'AgeGroup', 'Child_Adult']
     phenotype = pd.read_csv("data/external/development_fmri/development_fmri/participants.tsv", index_col='participant_id', sep='\t')
     timeseries_files = list(Path(f"{processed_dir}_gigaconnectome_a424").glob('*seg-*_timeseries.tsv'))
+    timeseries_files.sort()
     dataset_dict = {
         "robustscaler_timeseries": [],
         "raw_timeseries": [],
@@ -93,8 +94,8 @@ def preprocess_development_dataset(sourcedata_dir, processed_dir, arrow_dir=None
         scaler = RobustScaler()
         seg_ts_robustscaler = scaler.fit_transform(seg_ts)
         participant_id = file_path.stem.split('_')[0]
-        dataset_dict["raw_timeseries"].append(seg_ts[:ts_min_length, :])
-        dataset_dict["robustscaler_timeseries"].append(seg_ts_robustscaler[:ts_min_length, :])
+        dataset_dict["raw_timeseries"].append(seg_ts)
+        dataset_dict["robustscaler_timeseries"].append(seg_ts_robustscaler)
         dataset_dict["filename"].append(str(file_path.name))
         dataset_dict["participant_id"].append(participant_id)
         for col in convert_data:
@@ -103,14 +104,16 @@ def preprocess_development_dataset(sourcedata_dir, processed_dir, arrow_dir=None
     arrow_train_dataset.save_to_disk(
         dataset_path=Path(arrow_dir) / "fmri_development.arrow"
     )
+    print("Done.")
 
-    # --- Save Brain Region Coordinates Into Another Arrow Dataset ---#
+
+def brain_region_coord_to_arrow():
+    """Save Brain Region Coordinates Into Another Arrow Dataset"""
     coords_dat = np.loadtxt(files('hfplayground') / "data/brainlm/atlases/A424_Coordinates.dat").astype(np.float32)
     coords_pd = pd.DataFrame(coords_dat, columns=["Index", "X", "Y", "Z"])
     coords_dataset = Dataset.from_pandas(coords_pd)
     coords_dataset.save_to_disk(
-        dataset_path=Path(arrow_dir) / "brainregion_coordinates.arrow")
-    print("Done.")
+        dataset_path=files('hfplayground') / "data/brainlm/atlases/brainregion_coordinates.arrow")
 
 
 def downsample_for_tutorial(nii_file, output_dir):

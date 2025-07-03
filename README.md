@@ -28,7 +28,8 @@ git submodule update --init --recursive
 With `uv`
 ```
 uv venv
-uv sync
+uv sync --extra build
+uv sync --extra build --extra compile
 ```
 
 You can either activate the environment with `source .venv/bin/activate` and use this environment in the conventional python way,
@@ -37,7 +38,7 @@ or prepend any command you want to run with `uv run` to activate the environment
 
 ## Download models and data
 
-With `uv`
+With `uv`, example:
 ```
 uv run invoke prepare.models
 uv run invoke prepare.data
@@ -49,7 +50,8 @@ source .venv/bin/activate
 invoke prepare.models
 invoke prepare.atlas
 invoke prepare.data
-invoke prepare.timeseries
+invoke prepare.brainlm-workflow-timeseries
+invoke prepare.prepare.gigaconnectome-workflow-timeseries
 ```
 Check out `uv run invoke --list` for the commands and documentations.
 
