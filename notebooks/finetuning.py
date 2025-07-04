@@ -1,20 +1,26 @@
 """https://github.com/SalvoCalcagno/quantformer2024/blob/98286c88d79cf562966545b5509e93e611ae049b/src/trainers/trainer_brainlm.py#L55
-https://github.com/Shef-AIRE/FMM_TC/blob/main/FMM_TC-tutorial.ipynb 
+https://github.com/Shef-AIRE/FMM_TC/blob/main/FMM_TC-tutorial.ipynb
 https://github.com/wenhui0206/MeTSK/blob/main/meta_learning.py#L8
 BrainLM/continue_train_same_wandb.py
 """
+from dataclasses import dataclass, field
+
 from hfplayground.brainlm_mae.modeling_vit_mae_with_padding import ViTMAEForPreTraining
 from hfplayground.brainlm_mae.replace_vitmae_attn_with_flash_attn import replace_vitmae_attn_with_flash_attn
-from transformers import ViTMAEConfig
+from transformers import ViTMAEConfig, Trainer, TrainingArguments, HfArgumentParser
+from transformers.trainer_utils import get_last_checkpoint
+
 from datasets import load_from_disk, DatasetDict
 import numpy as np
 import torch
 from tqdm import tqdm
 import torch.nn.functional as F
 from pathlib import Path
-from hfplayground.models.brainlm import preprocess_images
+from hfplayground.models.utils import preprocess_images
 from hfplayground.utils.brainlm_trainer import BrainLMTrainer
 from hfplayground.utils.metrics import MetricsCalculator
+from hfplayground.brainlm_mae.vit_image_finetuning_mlp_pred_head import ViTMAEForFinetuning
+from hfplayground.brainlm_mae.vit_image_finetune_config import ViTMAEFinetuneConfig
 
 preprocessing = "development_fmri_gigaconnectome_a424"
 # preprocessing = "development_fmri_brainlm_a424"
@@ -45,7 +51,6 @@ inputs_path = f"data/processed/{preprocessing}/fmri_development.arrow"
 outputs_path = f"outputs/{preprocessing}_{model_params}"
 
 fmri_ds = load_from_disk(inputs_path).class_encode_column("Child_Adult")
-# train_ds.set_transform(transform_func)
 
 # 90% train, 10% test + validation
 train_testvalid = fmri_ds.train_test_split(train_size=0.8, stratify_by_column='Child_Adult')
@@ -56,7 +61,7 @@ train_test_valid_dataset = DatasetDict({
     'train': train_testvalid['train'],
     'test': test_valid['test'],
     'valid': test_valid['train']})
-
+train_test_valid_dataset.set_transform(transform_func)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 replace_vitmae_attn_with_flash_attn()
@@ -66,20 +71,28 @@ def transform_func(batch):
 
 config = ViTMAEConfig.from_pretrained("vandijklab/brainlm", subfolder=f"vitmae_{model_params}")
 config.update(model_arguments)
+config.train_mode = "auto_encode"
 model = ViTMAEForPreTraining.from_pretrained(
         "vandijklab/brainlm",
         config=config,
         subfolder=f"vitmae_{model_params}",
     ).to(device)
 
-model = model.half()  # half precision data type
-
-train_test_valid_dataset.set_transform(transform_func)
-
 metrics_calculator = MetricsCalculator()
 
+def collate_fn(examples):
+    pixel_values = torch.stack([example["pixel_values"] for example in examples])
+    # labels = torch.stack([example["labels"] for example in examples])
+    labels = torch.tensor([1 for _ in range(len(pixel_values))])
+
+    return {
+        "pixel_values": pixel_values,
+        "input_ids": pixel_values,
+        "labels": labels
+    }
+training_args = TrainingArguments(output_dir="outputs/test", remove_unused_columns=False)
 # Initialize our trainer
-trainer = BrainLMTrainer(
+trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=train_test_valid_dataset["train"],
@@ -87,3 +100,5 @@ trainer = BrainLMTrainer(
     data_collator=collate_fn,
     compute_metrics=metrics_calculator
 )
+
+trainer.train()

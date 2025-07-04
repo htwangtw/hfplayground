@@ -41,7 +41,7 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 # from transformers import ViTMAEConfig
-from brainlm_mae.vit_image_finetune_config import ViTMAEFinetuneConfig
+from hfplayground.brainlm_mae.vit_image_finetune_config import ViTMAEFinetuneConfig
 
 
 logger = logging.get_logger(__name__)
@@ -111,7 +111,7 @@ class ViTMAEModelOutput(ModelOutput):
             Sequence of hidden-states at the output of the last layer of the model.
         mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Tensor indicating which patches are masked (1) and which are not (0).
-        ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`): 
+        ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Tensor containing the original index of the (shuffled) masked patches.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
@@ -907,9 +907,9 @@ class ViTMAEForSelfSupervisedFinetuning(ViTMAEPreTrainedModel):
         self.vit = ViTMAEModel(config)
         self.decoder = ViTMAEDecoder(config, num_patches=self.vit.embeddings.num_patches)
         self.mlp_pred_head = MLP(
-            in_features=config.hidden_size, 
-            hidden_dim=config.hidden_size // 2, 
-            out_features=1, 
+            in_features=config.hidden_size,
+            hidden_dim=config.hidden_size // 2,
+            out_features=1,
             dropout_rate=config.hidden_dropout_prob
         )
         self.sigmoid_outputs = config.sigmoid_outputs
@@ -1021,7 +1021,7 @@ class ViTMAEForSelfSupervisedFinetuning(ViTMAEPreTrainedModel):
         )
         return pixel_values
 
-    ## Original 
+    ## Original
     # def forward_loss(self, pixel_values, pred, mask):
     #     """
     #     Args:
@@ -1068,7 +1068,7 @@ class ViTMAEForSelfSupervisedFinetuning(ViTMAEPreTrainedModel):
             raise NotImplementedError("Unknown loss function specified.")
 
         return loss
-    
+
     def recon_forward_loss(self, pixel_values, pred, mask):
         """
         Args:
@@ -1100,7 +1100,7 @@ class ViTMAEForSelfSupervisedFinetuning(ViTMAEPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        labels: torch.Tensor = None,  
+        labels: torch.Tensor = None,
         input_ids: torch.Tensor = None,  # not used
         noise: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
@@ -1138,7 +1138,7 @@ class ViTMAEForSelfSupervisedFinetuning(ViTMAEPreTrainedModel):
         width_pad_total = self.resize_target_size - pixel_values.shape[3]
         width_pad_total_half = width_pad_total // 2
         pixel_values_padded = F.pad(pixel_values, (width_pad_total_half, width_pad_total_half, height_pad_total_half, height_pad_total_half), "constant", -1)
-        
+
         outputs = self.vit(
             pixel_values_padded,
             noise=noise,
@@ -1212,9 +1212,9 @@ class ViTMAEForFinetuning(ViTMAEPreTrainedModel):
         self.vit = ViTMAEModel(config)
         # self.decoder = ViTMAEDecoder(config, num_patches=self.vit.embeddings.num_patches)
         self.mlp_pred_head = MLP(
-            in_features=config.hidden_size, 
-            hidden_dim=config.hidden_size // 2, 
-            out_features=1, 
+            in_features=config.hidden_size,
+            hidden_dim=config.hidden_size // 2,
+            out_features=1,
             dropout_rate=config.hidden_dropout_prob
         )
         self.sigmoid_outputs = config.sigmoid_outputs
@@ -1326,7 +1326,7 @@ class ViTMAEForFinetuning(ViTMAEPreTrainedModel):
         )
         return pixel_values
 
-    ## Original 
+    ## Original
     # def forward_loss(self, pixel_values, pred, mask):
     #     """
     #     Args:
@@ -1398,7 +1398,7 @@ class ViTMAEForFinetuning(ViTMAEPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        labels: torch.Tensor = None,  
+        labels: torch.Tensor = None,
         input_ids: torch.Tensor = None,  # not used
         noise: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
@@ -1436,7 +1436,7 @@ class ViTMAEForFinetuning(ViTMAEPreTrainedModel):
         width_pad_total = self.resize_target_size - pixel_values.shape[3]
         width_pad_total_half = width_pad_total // 2
         pixel_values_padded = F.pad(pixel_values, (width_pad_total_half, width_pad_total_half, height_pad_total_half, height_pad_total_half), "constant", -1)
-        
+
         outputs = self.vit(
             pixel_values_padded,
             noise=noise,

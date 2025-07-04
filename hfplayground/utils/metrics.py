@@ -6,12 +6,12 @@ from sklearn.metrics import r2_score
 from transformers.trainer_utils import EvalPrediction
 from scipy.stats import pearsonr
 
-from utils.plots import (
-    plot_model_output_histogram,
-    plot_scatterplot,
-    plot_masked_pred_trends_one_sample,
-    plot_cls_token_2d_umap,
-)
+# from hfplayground.utils.plots import (
+#     plot_model_output_histogram,
+#     plot_scatterplot,
+#     plot_masked_pred_trends_one_sample,
+#     plot_cls_token_2d_umap,
+# )
 
 
 class MetricsCalculator:
@@ -70,44 +70,44 @@ class MetricsCalculator:
 
         p = self.calculate_pearson_masked(pred_logits, signal_vectors, mask)
 
-        # --- Plot figures for evaluation to weights & biases ---#
-        plot_cls_token_2d_umap(
-            cls_tokens, age_labels, epoch=self.current_epoch, dataset_split="val"
-        )
-        plot_scatterplot(
-            pred_logits,
-            signal_vectors,
-            mask,
-            epoch=self.current_epoch,
-            dataset_split="val",
-        )
-        plot_model_output_histogram(
-            pred_logits,
-            signal_vectors,
-            mask,
-            epoch=self.current_epoch,
-            dataset_split="val",
-        )
-        plot_masked_pred_trends_one_sample(
-            pred_logits=pred_logits,
-            signal_vectors=signal_vectors,
-            mask=mask,
-            sample_idx=0,
-            node_idxs=[0, 100, 200],
-            dataset_split="val",
-            epoch=self.current_epoch,
-        )
-        plot_masked_pred_trends_one_sample(
-            pred_logits=pred_logits,
-            signal_vectors=signal_vectors,
-            mask=mask,
-            sample_idx=1,
-            node_idxs=[0, 100, 200],
-            dataset_split="val",
-            epoch=self.current_epoch,
-        )
+        # # --- Plot figures for evaluation to weights & biases ---#
+        # plot_cls_token_2d_umap(
+        #     cls_tokens, age_labels, epoch=self.current_epoch, dataset_split="val"
+        # )
+        # plot_scatterplot(
+        #     pred_logits,
+        #     signal_vectors,
+        #     mask,
+        #     epoch=self.current_epoch,
+        #     dataset_split="val",
+        # )
+        # plot_model_output_histogram(
+        #     pred_logits,
+        #     signal_vectors,
+        #     mask,
+        #     epoch=self.current_epoch,
+        #     dataset_split="val",
+        # )
+        # plot_masked_pred_trends_one_sample(
+        #     pred_logits=pred_logits,
+        #     signal_vectors=signal_vectors,
+        #     mask=mask,
+        #     sample_idx=0,
+        #     node_idxs=[0, 100, 200],
+        #     dataset_split="val",
+        #     epoch=self.current_epoch,
+        # )
+        # plot_masked_pred_trends_one_sample(
+        #     pred_logits=pred_logits,
+        #     signal_vectors=signal_vectors,
+        #     mask=mask,
+        #     sample_idx=1,
+        #     node_idxs=[0, 100, 200],
+        #     dataset_split="val",
+        #     epoch=self.current_epoch,
+        # )
 
-        # --- Return metrics dictionary ---#
+        # # --- Return metrics dictionary ---#
         metrics_dict = {
             "mse": mse,
             "mae": mae,
@@ -181,7 +181,7 @@ class MetricsCalculator:
             r_squared = 0.0
         return r_squared
 
-    
+
     @staticmethod
     def calculate_pearson_masked(pred_values, signal_values, mask):
         """
