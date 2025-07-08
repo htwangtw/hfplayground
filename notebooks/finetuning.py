@@ -7,20 +7,14 @@ from dataclasses import dataclass, field
 
 from hfplayground.brainlm_mae.modeling_vit_mae_with_padding import ViTMAEForPreTraining
 from hfplayground.brainlm_mae.replace_vitmae_attn_with_flash_attn import replace_vitmae_attn_with_flash_attn
-from transformers import ViTMAEConfig, Trainer, TrainingArguments, HfArgumentParser
-from transformers.trainer_utils import get_last_checkpoint
+from transformers import ViTMAEConfig, Trainer, TrainingArguments
 
 from datasets import load_from_disk, DatasetDict
-import numpy as np
 import torch
-from tqdm import tqdm
 import torch.nn.functional as F
-from pathlib import Path
 from hfplayground.models.utils import preprocess_images
-from hfplayground.utils.brainlm_trainer import BrainLMTrainer
 from hfplayground.utils.metrics import MetricsCalculator
-from hfplayground.brainlm_mae.vit_image_finetuning_mlp_pred_head import ViTMAEForFinetuning
-from hfplayground.brainlm_mae.vit_image_finetune_config import ViTMAEFinetuneConfig
+
 
 preprocessing = "development_fmri_gigaconnectome_a424"
 # preprocessing = "development_fmri_brainlm_a424"
@@ -61,13 +55,14 @@ train_test_valid_dataset = DatasetDict({
     'train': train_testvalid['train'],
     'test': test_valid['test'],
     'valid': test_valid['train']})
+
+def transform_func(batch):
+    return preprocess_images(batch, **preprocess_images_kargs)
 train_test_valid_dataset.set_transform(transform_func)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 replace_vitmae_attn_with_flash_attn()
 
-def transform_func(batch):
-    return preprocess_images(batch, **preprocess_images_kargs)
 
 config = ViTMAEConfig.from_pretrained("vandijklab/brainlm", subfolder=f"vitmae_{model_params}")
 config.update(model_arguments)
@@ -82,14 +77,15 @@ metrics_calculator = MetricsCalculator()
 
 def collate_fn(examples):
     pixel_values = torch.stack([example["pixel_values"] for example in examples])
-    # labels = torch.stack([example["labels"] for example in examples])
-    labels = torch.tensor([1 for _ in range(len(pixel_values))])
-
+    if "labels" not in examples:
+        labels = torch.tensor([1 for _ in range(len(pixel_values))])
+    labels = torch.stack([torch.tensor(example["labels"]) for example in examples])
     return {
         "pixel_values": pixel_values,
         "input_ids": pixel_values,
         "labels": labels
     }
+
 training_args = TrainingArguments(output_dir="outputs/test", remove_unused_columns=False)
 # Initialize our trainer
 trainer = Trainer(
