@@ -45,10 +45,11 @@ inputs_path = f"data/processed/{preprocessing}/fmri_development.arrow"
 outputs_path = f"outputs/{preprocessing}_{model_params}"
 
 fmri_ds = load_from_disk(inputs_path).class_encode_column("Child_Adult")
-
-# 90% train, 10% test + validation
+def transform_func(batch):
+    return preprocess_images(batch, **preprocess_images_kargs)
+# 80% train, 20% test + validation
 train_testvalid = fmri_ds.train_test_split(train_size=0.8, stratify_by_column='Child_Adult')
-# Split the 10% test + valid in half test, half valid
+# Split the 20% test + valid in half test, half valid
 test_valid = train_testvalid['test'].train_test_split(train_size=0.5, stratify_by_column='Child_Adult')
 # gather everyone if you want to have a single DatasetDict
 train_test_valid_dataset = DatasetDict({
@@ -56,8 +57,6 @@ train_test_valid_dataset = DatasetDict({
     'test': test_valid['test'],
     'valid': test_valid['train']})
 
-def transform_func(batch):
-    return preprocess_images(batch, **preprocess_images_kargs)
 train_test_valid_dataset.set_transform(transform_func)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -73,6 +72,215 @@ model = ViTMAEForPreTraining.from_pretrained(
         subfolder=f"vitmae_{model_params}",
     ).to(device)
 
+
+from typing import Dict
+
+import torch
+import numpy as np
+from sklearn.metrics import r2_score
+from transformers.trainer_utils import EvalPrediction
+from scipy.stats import pearsonr
+
+
+class MetricsCalculator:
+    """
+    Class for metric calculation. An object of this class will be passed to the Huggingface Trainer
+    class as a callable to calculate all metrics for training BrainLM models.
+
+    Receives an EvalPrediction object from Trainer.
+    Call:
+        eval_pred_obj:              EvalPrediction object containing predictions, label_ids, and model inputs
+
+    Returns:
+        metrics_dict: dictionary containing metrics
+            - mse:                  mean square error between masked expression values and model predictions
+            - mae:                  mean absolute error between masked expression values and model predictions
+            - cell_r2_avg:          average R2 across cells in minibatch, calculated on masked expression values
+            - cell_r2_list:         list of R2 of individual cells in minibatch
+            - gene_r2_avg:          average R2 across genes in minibatch, calculated on masked expression values
+            - gene_r2_list:         list of R2 values of individual genes in minibatch
+            - r2gene_idx_list:      indices of genes which were considered in gene_r2_avg calculation
+            - cross_entropy_loss:   cross entropy loss between masked expression and model prediction
+    """
+
+    def __init__(self) -> None:
+        self.cross_entropy_criterion = torch.nn.CrossEntropyLoss()
+        self.current_epoch = 0  # Updated in log() function of CellLM Trainer
+
+    def __call__(self, eval_pred_obj: EvalPrediction) -> Dict:
+        # Current method for getting input expression vectors in compute_metrics function:
+        #  Set training argument 'include_inputs_for_metrics' to True, and pass input expression vectors
+        #  as input_ids through model forward() function. Trainer class passed the input_ids tensor to
+        #  this function.
+        print(eval_pred_obj.predictions)
+        (pred_logits, encoder_latents), mask = eval_pred_obj.predictions
+        # pred is numpy array, shape [batch_size, num_voxels, num_tokens, time_patch_preds]
+        # encoder_latents is numpy array shape [batch_size, num_masked_tokens + 1 CLS token, hidden_size]
+        # mask is binary mask, shape [batch_size, num_voxels, num_tokens]
+
+
+        # Get input expression vectors and sampled gene indices
+        signal_vectors_padded = eval_pred_obj.inputs
+        signal_vectors = signal_vectors_padded[: pred_logits.shape[0], :]
+        signal_vectors = np.reshape(signal_vectors, pred_logits.shape)
+
+        # Calculate MSE and MAE
+        mse = self.calculate_mse(pred_logits, signal_vectors, mask)
+        mae = self.calculate_mae(pred_logits, signal_vectors, mask)
+
+        # Calculate R2
+        mask = mask.astype(bool)
+        unadjusted_r2 = self.calculate_r_squared_masked(
+            pred_logits, signal_vectors, mask
+        )
+
+        p = self.calculate_pearson_masked(pred_logits, signal_vectors, mask)
+
+        # # --- Plot figures for evaluation to weights & biases ---#
+        # plot_cls_token_2d_umap(
+        #     cls_tokens, age_labels, epoch=self.current_epoch, dataset_split="val"
+        # )
+        # plot_scatterplot(
+        #     pred_logits,
+        #     signal_vectors,
+        #     mask,
+        #     epoch=self.current_epoch,
+        #     dataset_split="val",
+        # )
+        # plot_model_output_histogram(
+        #     pred_logits,
+        #     signal_vectors,
+        #     mask,
+        #     epoch=self.current_epoch,
+        #     dataset_split="val",
+        # )
+        # plot_masked_pred_trends_one_sample(
+        #     pred_logits=pred_logits,
+        #     signal_vectors=signal_vectors,
+        #     mask=mask,
+        #     sample_idx=0,
+        #     node_idxs=[0, 100, 200],
+        #     dataset_split="val",
+        #     epoch=self.current_epoch,
+        # )
+        # plot_masked_pred_trends_one_sample(
+        #     pred_logits=pred_logits,
+        #     signal_vectors=signal_vectors,
+        #     mask=mask,
+        #     sample_idx=1,
+        #     node_idxs=[0, 100, 200],
+        #     dataset_split="val",
+        #     epoch=self.current_epoch,
+        # )
+
+        # # --- Return metrics dictionary ---#
+        metrics_dict = {
+            "mse": mse,
+            "mae": mae,
+            "r2": unadjusted_r2,
+            "pearson r": p,
+        }
+        print(mse)
+        return metrics_dict
+
+    @staticmethod
+    def calculate_mse(pred_values, signal_values, mask):
+        """
+        Helper function to calculate Mean Square Error (MSE) on predicted masked gene expression values.
+
+        Args:
+            pred_values:    numpy array of shape [batch_size, num_voxels, num_tokens, time_patch_preds]
+            signal_values:  numpy array of shape [batch_size, num_voxels, num_tokens, time_patch_preds]
+            mask:           binary mask of shape [batch_size, num_voxels, num_tokens]
+
+        Returns:
+            loss:           mean square error loss on only masked timepoints
+        """
+        mask = np.expand_dims(mask, axis=-1).repeat(pred_values.shape[-1], axis=-1)
+        loss = (((pred_values - signal_values) ** 2) * mask).sum() / mask.sum()
+        return loss.item()
+
+    @staticmethod
+    def calculate_mae(pred_values, signal_values, mask):
+        """
+        Helper function to calculate Mean Absolute Error (MAE) on predicted masked gene expression values.
+
+        Args:
+            pred_values:    numpy array of shape [batch_size, num_voxels, num_tokens, time_patch_preds]
+            signal_values:  numpy array of shape [batch_size, num_voxels, num_tokens, time_patch_preds]
+            mask:           binary mask of shape [batch_size, num_voxels, num_tokens]
+
+        Returns:
+            loss:           mean square error loss on only masked timepoints
+        """
+        mask = np.expand_dims(mask, axis=-1).repeat(pred_values.shape[-1], axis=-1)
+        loss = abs((pred_values - signal_values) * mask).sum() / mask.sum()
+        return loss.item()
+
+    @staticmethod
+    def calculate_r_squared_masked(pred_values, signal_values, mask):
+        """
+        Helper function to calculate R-squared between predicted pixel values and actual
+        masked pixel values over all masked gene expression values from all cells and genes.
+
+        Args:
+            pred_values:    numpy array of shape [batch_size, num_voxels, num_tokens, time_patch_preds]
+            signal_values:  numpy array of shape [batch_size, num_voxels, num_tokens, time_patch_preds]
+            mask:           binary mask of shape [batch_size, num_voxels, num_tokens]
+        """
+        gt_list = []
+        pred_vals_list = []
+        for sample_idx in range(signal_values.shape[0]):
+            for voxel_idx in range(signal_values.shape[1]):
+                gt_list += list(
+                    signal_values[sample_idx, voxel_idx][
+                        mask[sample_idx, voxel_idx]
+                    ].flatten()
+                )
+                pred_vals_list += list(
+                    pred_values[sample_idx, voxel_idx][
+                        mask[sample_idx, voxel_idx]
+                    ].flatten()
+                )
+
+        r_squared = r2_score(y_true=gt_list, y_pred=pred_vals_list)
+        if r_squared < 0.0:
+            r_squared = 0.0
+        return r_squared
+
+
+    @staticmethod
+    def calculate_pearson_masked(pred_values, signal_values, mask):
+        """
+        Helper function to calculate Pearson correlation between predicted pixel values and actual
+        masked pixel values over all masked fMRI values from all voxels.
+
+        Args:
+            pred_values:    numpy array of shape [batch_size, num_voxels, num_tokens, time_patch_preds]
+            signal_values:  numpy array of shape [batch_size, num_voxels, num_tokens, time_patch_preds]
+            mask:           binary mask of shape [batch_size, num_voxels, num_tokens]
+        """
+        gt_list = []
+        pred_vals_list = []
+        for sample_idx in range(signal_values.shape[0]):
+            for voxel_idx in range(signal_values.shape[1]):
+                gt_list += list(
+                    signal_values[sample_idx, voxel_idx][
+                        mask[sample_idx, voxel_idx]
+                    ].flatten()
+                )
+                pred_vals_list += list(
+                    pred_values[sample_idx, voxel_idx][
+                        mask[sample_idx, voxel_idx]
+                    ].flatten()
+                )
+
+        pearson = pearsonr(x=gt_list, y=pred_vals_list)
+        p = pearson.statistic
+        if p < 0.0:
+            p = 0.0
+        return p
+
 metrics_calculator = MetricsCalculator()
 
 def collate_fn(examples):
@@ -86,7 +294,10 @@ def collate_fn(examples):
         "labels": labels
     }
 
-training_args = TrainingArguments(output_dir="outputs/test", remove_unused_columns=False)
+training_args = TrainingArguments(
+    output_dir="outputs/test",
+    remove_unused_columns=False
+)
 # Initialize our trainer
 trainer = Trainer(
     model=model,
@@ -94,7 +305,8 @@ trainer = Trainer(
     train_dataset=train_test_valid_dataset["train"],
     eval_dataset=train_test_valid_dataset["valid"],
     data_collator=collate_fn,
-    compute_metrics=metrics_calculator
+    # compute_metrics=metrics_calculator
 )
 
-trainer.train()
+train_result = trainer.train()
+eval_metrics = trainer.evaluate()

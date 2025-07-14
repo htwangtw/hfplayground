@@ -44,7 +44,7 @@ class MetricsCalculator:
         #  Set training argument 'include_inputs_for_metrics' to True, and pass input expression vectors
         #  as input_ids through model forward() function. Trainer class passed the input_ids tensor to
         #  this function.
-
+        print(eval_pred_obj.predictions)
         (pred_logits, encoder_latents), mask = eval_pred_obj.predictions
         # pred is numpy array, shape [batch_size, num_voxels, num_tokens, time_patch_preds]
         # encoder_latents is numpy array shape [batch_size, num_masked_tokens + 1 CLS token, hidden_size]
@@ -114,6 +114,7 @@ class MetricsCalculator:
             "r2": unadjusted_r2,
             "pearson r": p,
         }
+        print(mse)
         return metrics_dict
 
     @staticmethod
