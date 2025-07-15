@@ -11,11 +11,12 @@ from hfplayground.utils import timeseires_to_images, get_attention_cls_token
 from hfplayground.brainlm_mae.modeling_vit_mae_with_padding import ViTMAEForPreTraining
 from hfplayground.brainlm_mae.replace_vitmae_attn_with_flash_attn import replace_vitmae_attn_with_flash_attn
 
-preprocessing = "development_fmri_gigaconnectome_a424"
-# preprocessing = "development_fmri_brainlm_a424"
+# preprocessing = "development_fmri_gigaconnectome_a424"
+preprocessing = "development_fmri_brainlm_a424"
 aggregation_mode = "cls" # 'cls', 'mean', or 'max'
 variable_of_interest_col_name = "Index"
-model_params = "111M"  # Choose between 650M and 111M
+# model_params = "111M"  # Choose between 650M and 111M
+model_params = "650M"
 timeseries_length = 160
 
 image_column_name_kw = {
@@ -50,7 +51,7 @@ def padding_timeseries_For_vitmae(pixel_values, image_size):
     return F.pad(pixel_values, (width_pad_total_half, width_pad_total_half, height_pad_total_half, height_pad_total_half), "constant", -1)
 
 
-if __name__ is "__main__":
+if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     replace_vitmae_attn_with_flash_attn()
 

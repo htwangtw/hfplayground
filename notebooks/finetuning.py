@@ -12,8 +12,8 @@ from transformers import ViTMAEConfig, Trainer, TrainingArguments
 from datasets import load_from_disk, DatasetDict
 import torch
 import torch.nn.functional as F
-from hfplayground.models.utils import preprocess_images
-from hfplayground.utils.metrics import MetricsCalculator
+from hfplayground.utils import preprocess_images
+from hfplayground.brainlm_utils.metrics import MetricsCalculator
 
 
 preprocessing = "development_fmri_gigaconnectome_a424"
@@ -31,8 +31,8 @@ preprocess_images_kargs = {
     "axis_index": "Y",
     "max_val_to_scale": None  # max_val_to_scale = 5.6430855  # this is weird.
 }
-
-model_params = "111M"  # Choose between 650M and 111M
+model_params = "650M"
+# model_params = "111M"  # Choose between 650M and 111M
 model_arguments = {  # BrainLM/train.py::ModelArguments
     "mask_ratio": 0.75,  # The ratio of the number of masked tokens per brain region.
     "timepoint_patching_size": 20,  #Length of moving window of timepoints from each brain regions signal for 1 sample.
