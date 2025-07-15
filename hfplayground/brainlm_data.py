@@ -301,7 +301,7 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
             )
 
         #Voxelwise Robust Scaler Normalization
-        recording_mean_subtracted3 = (recording_mean_subtracted3 - data_median_per_voxel / IQR)
+        recording_mean_subtracted3 = (recording_mean_subtracted3 - data_median_per_voxel) / IQR
 
         _99th_global_recording = np.divide(recording_mean_subtracted2, _99th_percentile)
 
