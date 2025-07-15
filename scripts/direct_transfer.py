@@ -13,8 +13,6 @@ from hfplayground.brainlm_mae.replace_vitmae_attn_with_flash_attn import replace
 
 # preprocessing = "development_fmri_gigaconnectome_a424"
 preprocessing = "development_fmri_brainlm_a424"
-aggregation_mode = "cls" # 'cls', 'mean', or 'max'
-variable_of_interest_col_name = "Index"
 # model_params = "111M"  # Choose between 650M and 111M
 model_params = "650M"
 timeseries_length = 160
@@ -102,21 +100,14 @@ if __name__ == "__main__":
             list_ageclass.append(recording['Child_Adult'])
             list_attn_cls_tokens.append(attn_cls_token)
             list_cls_tokens.append(cls_token)
-            if aggregation_mode != "cls":
-                all_embeddings.append(embedding)
+            all_embeddings.append(embedding)
 
     # pooling or 
-    if aggregation_mode == "cls":
-        print("cls aggregation")
-        all_embeds = np.concatenate(list_cls_tokens, axis=0)
-    elif aggregation_mode == "mean":
-        print("mean pool aggregation")
-        all_mean_embeddings = [e.mean(axis=1) for e in all_embeddings]
-        all_embeds = np.concatenate(all_mean_embeddings, axis=0)
-    elif aggregation_mode == "max":
-        print("max pool aggregation")
-        all_sum_embeddings = [e.max(axis=1) for e in all_embeddings]
-        all_embeds = np.concatenate(all_sum_embeddings, axis=0)
+    cls_embeds = np.concatenate(list_cls_tokens, axis=0)
+    all_mean_embeddings = [e.mean(axis=1) for e in all_embeddings]
+    all_mean_embeddings = np.concatenate(all_mean_embeddings, axis=0)
+    all_maxpool_embeddings = [e.max(axis=1) for e in all_embeddings]
+    all_maxpool_embeddings = np.concatenate(all_maxpool_embeddings, axis=0)
     
     # save all padded recording
     all_recordings = []
@@ -131,7 +122,9 @@ if __name__ == "__main__":
         'Gender': list_sex,
         'Child_Adult': list_ageclass,
         'cls_token': list_attn_cls_tokens,
-        'embedding': all_embeds,
+        'cls_embedding': cls_embeds,
+        'mean_embedding': all_mean_embeddings,
+        'max_embedding': all_maxpool_embeddings,
         'padded_recording': all_recordings
     }
     arrow_results = Dataset.from_dict(results)
