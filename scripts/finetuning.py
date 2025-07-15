@@ -12,7 +12,7 @@ from transformers import ViTMAEConfig, Trainer, TrainingArguments
 from datasets import load_from_disk, DatasetDict
 import torch
 import torch.nn.functional as F
-from hfplayground.utils import preprocess_images
+from hfplayground.utils import timeseires_to_images
 from hfplayground.brainlm_utils.metrics import MetricsCalculator
 
 
@@ -25,14 +25,14 @@ image_column_name_kw = {
     "development_fmri_brainlm_a424": "All_Patient_All_Voxel_Normalized_Recording"  # this works
 }
 
-preprocess_images_kargs = {
+timeseires_to_images_kargs = {
     "image_column_name": image_column_name_kw[preprocessing],
     "timeseries_length": timeseries_length, # this is for developmental dataset, full length
     "axis_index": "Y",
     "max_val_to_scale": None  # max_val_to_scale = 5.6430855  # this is weird.
 }
-model_params = "650M"
-# model_params = "111M"  # Choose between 650M and 111M
+# model_params = "650M"
+model_params = "111M"  # Choose between 650M and 111M
 model_arguments = {  # BrainLM/train.py::ModelArguments
     "mask_ratio": 0.75,  # The ratio of the number of masked tokens per brain region.
     "timepoint_patching_size": 20,  #Length of moving window of timepoints from each brain regions signal for 1 sample.
@@ -46,7 +46,7 @@ outputs_path = f"outputs/{preprocessing}_{model_params}"
 
 fmri_ds = load_from_disk(inputs_path).class_encode_column("Child_Adult")
 def transform_func(batch):
-    return preprocess_images(batch, **preprocess_images_kargs)
+    return timeseires_to_images(batch, **timeseires_to_images_kargs)
 # 80% train, 20% test + validation
 train_testvalid = fmri_ds.train_test_split(train_size=0.8, stratify_by_column='Child_Adult')
 # Split the 20% test + valid in half test, half valid
@@ -108,21 +108,17 @@ class MetricsCalculator:
         self.current_epoch = 0  # Updated in log() function of CellLM Trainer
 
     def __call__(self, eval_pred_obj: EvalPrediction) -> Dict:
-        # Current method for getting input expression vectors in compute_metrics function:
-        #  Set training argument 'include_inputs_for_metrics' to True, and pass input expression vectors
-        #  as input_ids through model forward() function. Trainer class passed the input_ids tensor to
-        #  this function.
-        print(eval_pred_obj.predictions)
-        (pred_logits, encoder_latents), mask = eval_pred_obj.predictions
-        # pred is numpy array, shape [batch_size, num_voxels, num_tokens, time_patch_preds]
-        # encoder_latents is numpy array shape [batch_size, num_masked_tokens + 1 CLS token, hidden_size]
-        # mask is binary mask, shape [batch_size, num_voxels, num_tokens]
+        pred_logits, mask, hidden_state, attention = eval_pred_obj.predictions
+        #   - 0: shape=(15, 424, 160), floats [batch size, parcel index, time points]
+        #   - 1: shape=(15, 424, 160), 0s and 1s  (mask?) [batch size, parcel index, time points]
+        #   - 2: shape=(15, 961), int  [batch size, ?] 961 = 31^2  num_hidden_layers = 32
+        #   - 3: shape=(15, 16, 241, 241), floats [batch size, num_attention_heads, sequence_length, sequence_length]  possibly attention
 
-
-        # Get input expression vectors and sampled gene indices
+        # Get input time series; include_for_metrics=['inputs'] must be set
+        print(pred_logits.shape)
+        print(eval_pred_obj.inputs.shape)
         signal_vectors_padded = eval_pred_obj.inputs
-        signal_vectors = signal_vectors_padded[: pred_logits.shape[0], :]
-        signal_vectors = np.reshape(signal_vectors, pred_logits.shape)
+        signal_vectors = signal_vectors_padded[:, 0, :, :]  # take the first channel
 
         # Calculate MSE and MAE
         mse = self.calculate_mse(pred_logits, signal_vectors, mask)
@@ -136,44 +132,7 @@ class MetricsCalculator:
 
         p = self.calculate_pearson_masked(pred_logits, signal_vectors, mask)
 
-        # # --- Plot figures for evaluation to weights & biases ---#
-        # plot_cls_token_2d_umap(
-        #     cls_tokens, age_labels, epoch=self.current_epoch, dataset_split="val"
-        # )
-        # plot_scatterplot(
-        #     pred_logits,
-        #     signal_vectors,
-        #     mask,
-        #     epoch=self.current_epoch,
-        #     dataset_split="val",
-        # )
-        # plot_model_output_histogram(
-        #     pred_logits,
-        #     signal_vectors,
-        #     mask,
-        #     epoch=self.current_epoch,
-        #     dataset_split="val",
-        # )
-        # plot_masked_pred_trends_one_sample(
-        #     pred_logits=pred_logits,
-        #     signal_vectors=signal_vectors,
-        #     mask=mask,
-        #     sample_idx=0,
-        #     node_idxs=[0, 100, 200],
-        #     dataset_split="val",
-        #     epoch=self.current_epoch,
-        # )
-        # plot_masked_pred_trends_one_sample(
-        #     pred_logits=pred_logits,
-        #     signal_vectors=signal_vectors,
-        #     mask=mask,
-        #     sample_idx=1,
-        #     node_idxs=[0, 100, 200],
-        #     dataset_split="val",
-        #     epoch=self.current_epoch,
-        # )
-
-        # # --- Return metrics dictionary ---#
+        # --- Return metrics dictionary ---
         metrics_dict = {
             "mse": mse,
             "mae": mae,
@@ -196,7 +155,6 @@ class MetricsCalculator:
         Returns:
             loss:           mean square error loss on only masked timepoints
         """
-        mask = np.expand_dims(mask, axis=-1).repeat(pred_values.shape[-1], axis=-1)
         loss = (((pred_values - signal_values) ** 2) * mask).sum() / mask.sum()
         return loss.item()
 
@@ -213,7 +171,6 @@ class MetricsCalculator:
         Returns:
             loss:           mean square error loss on only masked timepoints
         """
-        mask = np.expand_dims(mask, axis=-1).repeat(pred_values.shape[-1], axis=-1)
         loss = abs((pred_values - signal_values) * mask).sum() / mask.sum()
         return loss.item()
 
@@ -296,7 +253,8 @@ def collate_fn(examples):
 
 training_args = TrainingArguments(
     output_dir="outputs/test",
-    remove_unused_columns=False
+    remove_unused_columns=False,
+    include_for_metrics=['inputs']
 )
 # Initialize our trainer
 trainer = Trainer(
@@ -310,3 +268,17 @@ trainer = Trainer(
 
 train_result = trainer.train()
 eval_metrics = trainer.evaluate()
+# predictions = trainer.predict(train_test_valid_dataset["valid"])
+# signal_vectors_padded = collate_fn(train_test_valid_dataset["valid"])["pixel_values"]
+
+# pred_values, mask, hidden_state, attention = predictions.predictions
+# signal_values = signal_vectors_padded[:, 0, :, :].numpy()  # take the first channel
+
+# loss = (((pred_values - signal_values) ** 2) * mask).sum() / mask.sum()
+# 0: predictions
+#   - 0: shape=(15, 424, 160), floats [batch size, parcel index, time points]
+#   - 1: shape=(15, 424, 160), 0s and 1s  (mask?) [batch size, parcel index, time points]
+#   - 2: shape=(15, 961), int  [batch size, ?] 961 = 31^2  num_hidden_layers = 32
+#   - 3: shape=(15, 16, 241, 241), floats [batch size, num_attention_heads, sequence_length, sequence_length]  possibly attention
+# 1: shape=(15, 424), looks like [batch size, parcel index]
+# 2: loss and run time dict 
