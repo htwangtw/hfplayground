@@ -1,0 +1,24 @@
+{
+  "citation": "",
+  "description": "",
+  "features": {
+    "Index": {
+      "dtype": "float32",
+      "_type": "Value"
+    },
+    "X": {
+      "dtype": "float32",
+      "_type": "Value"
+    },
+    "Y": {
+      "dtype": "float32",
+      "_type": "Value"
+    },
+    "Z": {
+      "dtype": "float32",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": ""
+}

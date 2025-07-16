@@ -4,12 +4,15 @@ from datasets import load_from_disk, Dataset
 import numpy as np
 import torch
 from tqdm import tqdm
-import torch.nn.functional as F
 from pathlib import Path
 
-from hfplayground.utils import timeseires_to_images, get_attention_cls_token
-from hfplayground.brainlm_mae.modeling_vit_mae_with_padding import ViTMAEForPreTraining
-from hfplayground.brainlm_mae.replace_vitmae_attn_with_flash_attn import replace_vitmae_attn_with_flash_attn
+from hfplayground.models.brainlm_mae.utils import timeseires_to_images, get_attention_cls_token, padding_timeseries_For_vitmae
+from hfplayground.models.brainlm_mae.modeling_vit_mae_with_padding import ViTMAEForPreTraining
+try:
+    from hfplayground.models.brainlm_mae.replace_vitmae_attn_with_flash_attn import replace_vitmae_attn_with_flash_attn
+    replace_vitmae_attn_with_flash_attn()
+except ImportError:
+    print('not using flash attention')
 
 preprocessing = "development_fmri_gigaconnectome_a424"
 # preprocessing = "development_fmri_brainlm_a424"
@@ -26,8 +29,16 @@ image_column_name_kw = {
 timeseires_to_images_kargs = {
     "image_column_name": image_column_name_kw[preprocessing],
     "timeseries_length": timeseries_length, # this is for developmental dataset, full length
-    "axis_index": "Y",
     "max_val_to_scale": None  # max_val_to_scale = 5.6430855  # this is weird.
+}
+
+# from_pretrained_kargs = {
+#     "pretrained_model_name_or_path": "vandijklab/brainlm",
+#     "subfolder": f"vitmae_{model_params}"
+# }
+
+from_pretrained_kargs = {
+    "pretrained_model_name_or_path": f"./outputs/{preprocessing}_{model_params}/finetuning"
 }
 
 model_arguments = {  # BrainLM/train.py::ModelArguments
@@ -40,30 +51,20 @@ model_arguments = {  # BrainLM/train.py::ModelArguments
 }
 
 
-def padding_timeseries_For_vitmae(pixel_values, image_size):
-    # pixel_values is [batch, channels=3, number of parcels, number of time points]. Pad to [batch, channels=3, 434, 434]
-    height_pad_total = image_size[0] - pixel_values.shape[2]
-    height_pad_total_half = height_pad_total // 2
-    width_pad_total = image_size[1] - pixel_values.shape[3]
-    width_pad_total_half = width_pad_total // 2
-    return F.pad(pixel_values, (width_pad_total_half, width_pad_total_half, height_pad_total_half, height_pad_total_half), "constant", -1)
-
-
-if __name__ == "__main__":
+def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    replace_vitmae_attn_with_flash_attn()
-
+    
     def transform_func(batch):
         return timeseires_to_images(batch, **timeseires_to_images_kargs)
     outputs_path = f"outputs/{preprocessing}_{model_params}"
+    modeltype = "direct_transfer" if len(from_pretrained_kargs) > 1 else "finetuning_transfer"
 
     # load model
-    config = ViTMAEConfig.from_pretrained("vandijklab/brainlm", subfolder=f"vitmae_{model_params}")
+    config = ViTMAEConfig.from_pretrained(**from_pretrained_kargs)
     config.update(model_arguments)
     model = ViTMAEForPreTraining.from_pretrained(
-            "vandijklab/brainlm",
+            **from_pretrained_kargs,
             config=config,
-            subfolder=f"vitmae_{model_params}",
         ).to(device)
 
     model = model.half()  # half precision data type
@@ -111,7 +112,7 @@ if __name__ == "__main__":
     
     # save all padded recording
     all_recordings = []
-    for idx, batch in enumerate(tqdm(train_ds)):
+    for _, batch in enumerate(tqdm(train_ds)):
         signal = batch["pixel_values"]  # (1, 3, num_parcel, timeseries_length)
         recording = signal.flatten(start_dim=1)
         recording = np.array(recording, dtype=np.float32)
@@ -128,4 +129,8 @@ if __name__ == "__main__":
         'padded_recording': all_recordings
     }
     arrow_results = Dataset.from_dict(results)
-    arrow_results.save_to_disk(Path(outputs_path) / "direct_transfer.arrow")
+    arrow_results.save_to_disk(Path(outputs_path) / f"{modeltype}.arrow")
+
+
+if __name__ == "__main__":
+    main()

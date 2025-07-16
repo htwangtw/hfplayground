@@ -1,7 +1,7 @@
 import invoke
 from nilearn.datasets import fetch_development_fmri
-from hfplayground.data import preprocess_development_dataset, downsample_for_tutorial, brain_region_coord_to_arrow
-from hfplayground.brainlm_data import convert_fMRIvols_to_A424, convert_to_arrow_datasets
+from hfplayground.data.prepare import preprocess_development_dataset, downsample_for_tutorial, brain_region_coord_to_arrow
+from hfplayground.data.brainlm import convert_fMRIvols_to_A424, convert_to_arrow_datasets
 
 @invoke.task
 def models(c):
