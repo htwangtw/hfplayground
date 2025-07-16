@@ -11,8 +11,8 @@ from hfplayground.utils import timeseires_to_images, get_attention_cls_token
 from hfplayground.brainlm_mae.modeling_vit_mae_with_padding import ViTMAEForPreTraining
 from hfplayground.brainlm_mae.replace_vitmae_attn_with_flash_attn import replace_vitmae_attn_with_flash_attn
 
-# preprocessing = "development_fmri_gigaconnectome_a424"
-preprocessing = "development_fmri_brainlm_a424"
+preprocessing = "development_fmri_gigaconnectome_a424"
+# preprocessing = "development_fmri_brainlm_a424"
 # model_params = "111M"  # Choose between 650M and 111M
 model_params = "650M"
 timeseries_length = 160
@@ -128,4 +128,4 @@ if __name__ == "__main__":
         'padded_recording': all_recordings
     }
     arrow_results = Dataset.from_dict(results)
-    arrow_results.save_to_disk(Path(f"{outputs_path}.arrow"))
+    arrow_results.save_to_disk(Path(outputs_path) / "direct_transfer.arrow")

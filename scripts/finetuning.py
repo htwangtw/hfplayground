@@ -31,8 +31,8 @@ timeseires_to_images_kargs = {
     "axis_index": "Y",
     "max_val_to_scale": None  # max_val_to_scale = 5.6430855  # this is weird.
 }
-# model_params = "650M"
-model_params = "111M"  # Choose between 650M and 111M
+model_params = "650M"
+# model_params = "111M"  # Choose between 650M and 111M
 model_arguments = {  # BrainLM/train.py::ModelArguments
     "mask_ratio": 0.75,  # The ratio of the number of masked tokens per brain region.
     "timepoint_patching_size": 20,  #Length of moving window of timepoints from each brain regions signal for 1 sample.
@@ -42,7 +42,7 @@ model_arguments = {  # BrainLM/train.py::ModelArguments
     "output_attentions": True,
 }
 inputs_path = f"data/processed/{preprocessing}/fmri_development.arrow"
-outputs_path = f"outputs/{preprocessing}_{model_params}"
+outputs_path = f"outputs/{preprocessing}_{model_params}/finetuning"
 
 fmri_ds = load_from_disk(inputs_path).class_encode_column("Child_Adult")
 def transform_func(batch):
@@ -114,9 +114,8 @@ class MetricsCalculator:
         #   - 2: shape=(15, 961), int  [batch size, ?] 961 = 31^2  num_hidden_layers = 32
         #   - 3: shape=(15, 16, 241, 241), floats [batch size, num_attention_heads, sequence_length, sequence_length]  possibly attention
 
-        # Get input time series; include_for_metrics=['inputs'] must be set
-        print(pred_logits.shape)
-        print(eval_pred_obj.inputs.shape)
+        # Get input time series; include_for_metrics=['inputs'] must be set 
+        # in TrainingArguments
         signal_vectors_padded = eval_pred_obj.inputs
         signal_vectors = signal_vectors_padded[:, 0, :, :]  # take the first channel
 
@@ -137,7 +136,7 @@ class MetricsCalculator:
             "mse": mse,
             "mae": mae,
             "r2": unadjusted_r2,
-            "pearson r": p,
+            "pearsonr": p,
         }
         print(mse)
         return metrics_dict
@@ -252,7 +251,7 @@ def collate_fn(examples):
     }
 
 training_args = TrainingArguments(
-    output_dir="outputs/test",
+    output_dir=outputs_path,
     remove_unused_columns=False,
     include_for_metrics=['inputs']
 )
@@ -263,22 +262,16 @@ trainer = Trainer(
     train_dataset=train_test_valid_dataset["train"],
     eval_dataset=train_test_valid_dataset["valid"],
     data_collator=collate_fn,
-    # compute_metrics=metrics_calculator
+    compute_metrics=metrics_calculator
 )
 
 train_result = trainer.train()
-eval_metrics = trainer.evaluate()
-# predictions = trainer.predict(train_test_valid_dataset["valid"])
-# signal_vectors_padded = collate_fn(train_test_valid_dataset["valid"])["pixel_values"]
+trainer.save_model()
+trainer.log_metrics("train", train_result.metrics)
+trainer.save_metrics("train", train_result.metrics)
+trainer.save_state()
 
-# pred_values, mask, hidden_state, attention = predictions.predictions
-# signal_values = signal_vectors_padded[:, 0, :, :].numpy()  # take the first channel
-
-# loss = (((pred_values - signal_values) ** 2) * mask).sum() / mask.sum()
-# 0: predictions
-#   - 0: shape=(15, 424, 160), floats [batch size, parcel index, time points]
-#   - 1: shape=(15, 424, 160), 0s and 1s  (mask?) [batch size, parcel index, time points]
-#   - 2: shape=(15, 961), int  [batch size, ?] 961 = 31^2  num_hidden_layers = 32
-#   - 3: shape=(15, 16, 241, 241), floats [batch size, num_attention_heads, sequence_length, sequence_length]  possibly attention
-# 1: shape=(15, 424), looks like [batch size, parcel index]
-# 2: loss and run time dict 
+# Evaluation
+metrics = trainer.evaluate()
+trainer.log_metrics("eval", metrics)
+trainer.save_metrics("eval", metrics)
