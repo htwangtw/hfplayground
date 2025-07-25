@@ -17,7 +17,7 @@ git clone git@github.com:htwangtw/hfplayground.git
 ```
 
 The brainLM submodule is for record keeping.
-However, if you wish pull it, run:
+However, if you wish to pull it, run:
 
 ```
 git submodule update --init --recursive
@@ -25,6 +25,10 @@ git submodule update --init --recursive
 
 ## Create virtual environment
 
+On Rorqual, remember to add module:
+```
+module add cudacore/.12.6.2
+```
 With `uv`
 ```
 uv venv
