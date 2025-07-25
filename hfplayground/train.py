@@ -1,4 +1,7 @@
-"""https://github.com/SalvoCalcagno/quantformer2024/blob/98286c88d79cf562966545b5509e93e611ae049b/src/trainers/trainer_brainlm.py#L55
+"""
+Fine tune the embedding layer of BrainLM ViT-MAE model on fMRI data.
+
+https://github.com/SalvoCalcagno/quantformer2024/blob/98286c88d79cf562966545b5509e93e611ae049b/src/trainers/trainer_brainlm.py#L55
 https://github.com/Shef-AIRE/FMM_TC/blob/main/FMM_TC-tutorial.ipynb
 https://github.com/wenhui0206/MeTSK/blob/main/meta_learning.py#L8
 BrainLM/continue_train_same_wandb.py
@@ -12,6 +15,11 @@ import torch
 from hfplayground.models.brainlm_mae.utils import timeseires_to_images, collate_fn
 from hfplayground.models.brainlm_mae.metrics import MetricsCalculator
 
+try:
+    from hfplayground.models.brainlm_mae.replace_vitmae_attn_with_flash_attn import replace_vitmae_attn_with_flash_attn
+    replace_vitmae_attn_with_flash_attn()
+except ImportError:
+    print('not using flash attention')
 
 preprocessing = "development_fmri_gigaconnectome_a424"
 # preprocessing = "development_fmri_brainlm_a424"
@@ -19,7 +27,7 @@ timeseries_length = 160
 
 image_column_name_kw = {
     "development_fmri_gigaconnectome_a424": "robustscaler_timeseries",
-    "development_fmri_brainlm_a424": "All_Patient_All_Voxel_Normalized_Recording"  # this works
+    "development_fmri_brainlm_a424": "Subtract_Mean_Divide_Global_STD_Normalized_Recording"  # this works
 }
 
 timeseires_to_images_kargs = {
@@ -41,56 +49,68 @@ model_arguments = {  # BrainLM/train.py::ModelArguments
 inputs_path = f"data/processed/{preprocessing}/fmri_development.arrow"
 outputs_path = f"outputs/{preprocessing}_{model_params}/finetuning"
 
-fmri_ds = load_from_disk(inputs_path).class_encode_column("Child_Adult")
 def transform_func(batch):
     return timeseires_to_images(batch, **timeseires_to_images_kargs)
-# 80% train, 20% test
-train_test = fmri_ds.train_test_split(train_size=0.8, stratify_by_column='Child_Adult')
-# gather everyone if you want to have a single DatasetDict
-train_test_dataset = DatasetDict({
-    'train': train_test['train'],
-    'test': train_test['test']})
-
-train_test_dataset.set_transform(transform_func)
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-replace_vitmae_attn_with_flash_attn()
 
 
-config = ViTMAEConfig.from_pretrained("vandijklab/brainlm", subfolder=f"vitmae_{model_params}")
-config.update(model_arguments)
-config.train_mode = "auto_encode"
-model = ViTMAEForPreTraining.from_pretrained(
-        "vandijklab/brainlm",
-        config=config,
-        subfolder=f"vitmae_{model_params}",
-    ).to(device)
+def main():
+    fmri_ds = load_from_disk(inputs_path).class_encode_column("Child_Adult")
+    # 80% train, 20% test
+    train_test = fmri_ds.train_test_split(train_size=0.8, stratify_by_column='Child_Adult')
+    # gather everyone if you want to have a single DatasetDict
+    train_test_dataset = DatasetDict({
+        'train': train_test['train'],
+        'test': train_test['test']})
+
+    train_test_dataset.set_transform(transform_func)
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    replace_vitmae_attn_with_flash_attn()
+
+    config = ViTMAEConfig.from_pretrained("vandijklab/brainlm", subfolder=f"vitmae_{model_params}")
+    config.update(model_arguments)
+    config.train_mode = "auto_encode"
+    model = ViTMAEForPreTraining.from_pretrained(
+            "vandijklab/brainlm",
+            config=config,
+            subfolder=f"vitmae_{model_params}",
+        ).to(device)
+
+    # Freeze the model parameters aside from the embedding layer
+    for name, param in model.named_parameters():
+        if all(keywords not in name for keywords in["patch_embed", "cls_token"]):
+            param.requires_grad = False
+
+    # read this: https://medium.com/@kdk199604/fpt-time-series-analysis-powered-by-frozen-pretrained-transformers-7f6d6fc64186
+
+    metrics_calculator = MetricsCalculator()
+
+    training_args = TrainingArguments(
+        output_dir=outputs_path,
+        remove_unused_columns=False,
+        include_for_metrics=['inputs']
+    )
+    # Initialize our trainer
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_test_dataset["train"],
+        eval_dataset=train_test_dataset["test"],
+        data_collator=collate_fn,
+        compute_metrics=metrics_calculator
+    )
+
+    train_result = trainer.train()
+    trainer.save_model()
+    trainer.log_metrics("train", train_result.metrics)
+    trainer.save_metrics("train", train_result.metrics)
+    trainer.save_state()
+
+    # Evaluation
+    metrics = trainer.evaluate()
+    trainer.log_metrics("eval", metrics)
+    trainer.save_metrics("eval", metrics)
 
 
-metrics_calculator = MetricsCalculator()
-
-training_args = TrainingArguments(
-    output_dir=outputs_path,
-    remove_unused_columns=False,
-    include_for_metrics=['inputs']
-)
-# Initialize our trainer
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_test_dataset["train"],
-    eval_dataset=train_test_dataset["test"],
-    data_collator=collate_fn,
-    compute_metrics=metrics_calculator
-)
-
-train_result = trainer.train()
-trainer.save_model()
-trainer.log_metrics("train", train_result.metrics)
-trainer.save_metrics("train", train_result.metrics)
-trainer.save_state()
-
-# Evaluation
-metrics = trainer.evaluate()
-trainer.log_metrics("eval", metrics)
-trainer.save_metrics("eval", metrics)
+if __name__ == "__main__":
+    main()

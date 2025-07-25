@@ -3,6 +3,7 @@ from transformers import ViTMAEConfig
 from datasets import load_from_disk, Dataset
 import numpy as np
 import torch
+
 from tqdm import tqdm
 from pathlib import Path
 
@@ -14,15 +15,16 @@ try:
 except ImportError:
     print('not using flash attention')
 
+
 preprocessing = "development_fmri_gigaconnectome_a424"
 # preprocessing = "development_fmri_brainlm_a424"
-# model_params = "111M"  # Choose between 650M and 111M
-model_params = "650M"
+model_params = "111M"  # Choose between 650M and 111M
+# model_params = "650M"
 timeseries_length = 160
 
 image_column_name_kw = {
     "development_fmri_gigaconnectome_a424": "robustscaler_timeseries",
-    "development_fmri_brainlm_a424": "All_Patient_All_Voxel_Normalized_Recording"  # this works
+    "development_fmri_brainlm_a424": "Subtract_Mean_Divide_Global_STD_Normalized_Recording"  # this works
     # In the paper brainlm claimed to use the robust scalar but that option produces NaN
 }
 
@@ -53,7 +55,7 @@ model_arguments = {  # BrainLM/train.py::ModelArguments
 
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
+
     def transform_func(batch):
         return timeseires_to_images(batch, **timeseires_to_images_kargs)
     outputs_path = f"outputs/{preprocessing}_{model_params}"
@@ -103,13 +105,13 @@ def main():
             list_cls_tokens.append(cls_token)
             all_embeddings.append(embedding)
 
-    # pooling or 
+    # pooling or
     cls_embeds = np.concatenate(list_cls_tokens, axis=0)
     all_mean_embeddings = [e.mean(axis=1) for e in all_embeddings]
     all_mean_embeddings = np.concatenate(all_mean_embeddings, axis=0)
     all_maxpool_embeddings = [e.max(axis=1) for e in all_embeddings]
     all_maxpool_embeddings = np.concatenate(all_maxpool_embeddings, axis=0)
-    
+
     # save all padded recording
     all_recordings = []
     for _, batch in enumerate(tqdm(train_ds)):
