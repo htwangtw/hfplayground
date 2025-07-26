@@ -24,6 +24,7 @@ dependencies = [
     "torchaudio",
     "transformers[torch]>=4.48.3",
     "evaluate>=0.4.4",
+    "click>=8.2.1",
 ]
 
 [project.optional-dependencies]

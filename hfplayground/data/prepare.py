@@ -1,5 +1,5 @@
 from nilearn import datasets, image
-from nilearn.maskers import NiftiMasker,NiftiLabelsMasker
+from nilearn.maskers import MultiNiftiMasker, MultiNiftiLabelsMasker
 from nilearn.interfaces.fmriprep import load_confounds_strategy
 from pathlib import Path
 from tqdm import tqdm
@@ -37,39 +37,51 @@ def preprocess_development_dataset(sourcedata_dir, processed_dir, arrow_dir=None
     mni_mask = datasets.fetch_icbm152_2009()['mask']
     mni_mask = downsample_for_tutorial(mni_mask, '/tmp/')
     # quick preprocessing
-    # TODO: standardization is done at the time window creation stage
-    # However, when refactoring, I will change the code to handle
-    # standardisation at time series creation stage
-    # (so we can take outputs from giga connectome)
-    # If standardize of time series per voxel was not performed,
-    # The BrainLM workflow will produce very different outputs based on the
-    # scaling options
-    masker = NiftiMasker(mask_img=mni_mask, smoothing_fwhm=8, standardize=True)
-    complete_labels = (np.arange(424)+1).tolist()
-    for func in tqdm(development_dataset['func'], desc="Denoising data..."):
-        nii_name = func.split('/')[-1].replace('preproc', denoise_strategy_name)
-        if not Path(f"{processed_dir}/{nii_name}").exists():
-            conf, sm = load_confounds_strategy(img_files=func, **denoise_strategy)
-            ts = masker.fit_transform(func, confounds=conf, sample_mask=sm)
-            nii = masker.inverse_transform(ts)
-            nii.to_filename(f"{processed_dir}/{nii_name}")
-            del ts
-            del nii
 
-    atlas_masker = NiftiLabelsMasker(labels_img=files('hfplayground') / ATLAS_FILE, mask_img=mni_mask).fit()  # no scaling here
-    Path(f"{processed_dir}_gigaconnectome_a424").mkdir(exist_ok=True, parents=True)
-    for func in tqdm(development_dataset['func'], desc="Extract time series..."):
-        nii_name = func.split('/')[-1].replace('preproc', denoise_strategy_name)
+    # Check if the processed directory exists
+    raw_to_preproc = []
+    niis_preproc_path = []
+    niis_to_extract = []
+    ts_file_paths = []
+    for path_raw in development_dataset['func']:
+        nii_name = path_raw.split('/')[-1].replace('preproc', denoise_strategy_name)
+        nii_path = Path(f"{processed_dir}/{nii_name}")
         matches = nii_name.split('_space-')[0]
         ts_filename = f"{matches}_seg-{seg_name}_desc-{denoise_strategy_name}_timeseries.tsv"
-        if Path(f"{processed_dir}_gigaconnectome_a424/{ts_filename}").exists():
-            continue
-        seg_ts = atlas_masker.fit_transform(f"{processed_dir}/{nii_name}")
-        seg_ts = pd.DataFrame(seg_ts, columns=[int(l) for l in atlas_masker.labels_])
-        # they filled missing values with 0, so we do the same..... this is bad
-        seg_ts = seg_ts.reindex(columns=complete_labels, fill_value=np.nan)
-        seg_ts.to_csv(Path(f"{processed_dir}_gigaconnectome_a424") / ts_filename, sep='\t', index=False)
-        del seg_ts
+        ts_path = Path(f"{processed_dir}_gigaconnectome_a424/{ts_filename}")
+        if not nii_path.exists():
+            raw_to_preproc.append(path_raw)
+            niis_preproc_path.append(nii_path)
+        if not ts_path.exists():
+            niis_to_extract.append(nii_path)
+            ts_file_paths.append(ts_path)
+
+    if len(raw_to_preproc)>0:  # giga connectome preprocessing and brainlm workflow shares denoising
+        # I did not do signal normalisation here. It will throw brainlm results off.
+        masker = MultiNiftiMasker(mask_img=mni_mask, smoothing_fwhm=8, verbose=2)
+        conf, sm = load_confounds_strategy(img_files=raw_to_preproc, **denoise_strategy)
+        fmri_data = masker.fit_transform(raw_to_preproc, confounds=conf, sample_mask=sm)
+
+        for reproc_path, fd in tqdm(zip(niis_preproc_path, fmri_data), desc="Save denoising data..."):
+            nii = masker.inverse_transform(fd)
+            nii.to_filename(reproc_path)
+
+    if len(niis_to_extract) > 0:
+        Path(f"{processed_dir}_gigaconnectome_a424").mkdir(exist_ok=True, parents=True)
+        complete_labels = (np.arange(424)+1).tolist()
+
+        atlas_masker = MultiNiftiLabelsMasker(
+            labels_img=files('hfplayground') / ATLAS_FILE,
+            labels=complete_labels,
+            mask_img=mni_mask, verbose=3
+        ).fit()  # no scaling here
+        parcellated_timeseries = atlas_masker.transform(niis_to_extract)
+
+        for ts_path, seg_ts in tqdm(zip(ts_file_paths, parcellated_timeseries), desc="save time series..."):
+            seg_ts = pd.DataFrame(seg_ts, columns=[int(l) for l in atlas_masker.labels_])
+            seg_ts = seg_ts.reindex(columns=complete_labels)
+            seg_ts.fillna("n/a", inplace=True)
+            seg_ts.to_csv(ts_path, sep='\t', index=False)
 
     if not arrow_dir:
         print("No arrow_dir provided, skipping arrow conversion.")
@@ -93,27 +105,31 @@ def preprocess_development_dataset(sourcedata_dir, processed_dir, arrow_dir=None
         # apply robust scaling to the time series
         scaler = RobustScaler()
         seg_ts_robustscaler = scaler.fit_transform(seg_ts)
+        # they filled missing values with 0, so we do the same..... this is bad
+        seg_ts_robustscaler = np.nan_to_num(seg_ts_robustscaler, nan=0.0, posinf=0.0, neginf=0.0)
+        seg_ts_z = (seg_ts - np.mean(seg_ts, axis=0)) / np.std(seg_ts, axis=0)
         participant_id = file_path.stem.split('_')[0]
         dataset_dict["raw_timeseries"].append(seg_ts)
         dataset_dict["robustscaler_timeseries"].append(seg_ts_robustscaler)
+        dataset_dict["zscore_timeseries"].append(seg_ts_z)
         dataset_dict["filename"].append(str(file_path.name))
         dataset_dict["participant_id"].append(participant_id)
         for col in convert_data:
             dataset_dict[col].append(phenotype.loc[participant_id, col])
     arrow_train_dataset = Dataset.from_dict(dataset_dict)
     arrow_train_dataset.save_to_disk(
-        dataset_path=Path(arrow_dir) / "fmri_development.arrow"
+        dataset_path=Path(arrow_dir)
     )
     print("Done.")
 
 
 def brain_region_coord_to_arrow():
     """Save Brain Region Coordinates Into Another Arrow Dataset"""
-    coords_dat = np.loadtxt(files('hfplayground') / "data/brainlm/atlases/A424_Coordinates.dat").astype(np.float32)
+    coords_dat = np.loadtxt(files('hfplayground') / "resource/brainlm/atlases/A424_Coordinates.dat").astype(np.float32)
     coords_pd = pd.DataFrame(coords_dat, columns=["Index", "X", "Y", "Z"])
     coords_dataset = Dataset.from_pandas(coords_pd)
     coords_dataset.save_to_disk(
-        dataset_path=files('hfplayground') / "data/brainlm/atlases/brainregion_coordinates.arrow")
+        dataset_path=files('hfplayground') / "resource/brainlm/atlases/brainregion_coordinates.arrow")
 
 
 def downsample_for_tutorial(nii_file, output_dir):

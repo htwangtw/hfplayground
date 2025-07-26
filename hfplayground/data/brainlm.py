@@ -303,7 +303,8 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
             )
 
         #Voxelwise Robust Scaler Normalization
-        recording_mean_subtracted3 = (recording_mean_subtracted3 - data_median_per_voxel) / IQR
+        recording_mean_subtracted3 = recording_mean_subtracted3 - recording_mean_subtracted3.mean(axis=0)
+        recording_mean_subtracted3 = (recording_mean_subtracted3 - data_median_per_voxel / IQR)
 
         _99th_global_recording = np.divide(recording_mean_subtracted2, _99th_percentile)
 
@@ -337,7 +338,7 @@ def convert_to_arrow_datasets(uk_biobank_dir, save_path, ts_min_length=200, comp
 
     arrow_train_dataset = Dataset.from_dict(train_dataset_dict)
     arrow_train_dataset.save_to_disk(
-        dataset_path=os.path.join(save_path, "fmri_development.arrow")
+        dataset_path=os.path.join(save_path)
     )
 
     # # --- Save Brain Region Coordinates Into Another Arrow Dataset ---#

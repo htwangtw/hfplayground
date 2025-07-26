@@ -14,34 +14,11 @@ try:
     replace_vitmae_attn_with_flash_attn()
 except ImportError:
     print('not using flash attention')
+import click
 
 
-preprocessing = "development_fmri_gigaconnectome_a424"
-# preprocessing = "development_fmri_brainlm_a424"
-model_params = "111M"  # Choose between 650M and 111M
-# model_params = "650M"
 timeseries_length = 160
 
-image_column_name_kw = {
-    "development_fmri_gigaconnectome_a424": "robustscaler_timeseries",
-    "development_fmri_brainlm_a424": "Subtract_Mean_Divide_Global_STD_Normalized_Recording"  # this works
-    # In the paper brainlm claimed to use the robust scalar but that option produces NaN
-}
-
-timeseires_to_images_kargs = {
-    "image_column_name": image_column_name_kw[preprocessing],
-    "timeseries_length": timeseries_length, # this is for developmental dataset, full length
-    "max_val_to_scale": None  # max_val_to_scale = 5.6430855  # this is weird.
-}
-
-# from_pretrained_kargs = {
-#     "pretrained_model_name_or_path": "vandijklab/brainlm",
-#     "subfolder": f"vitmae_{model_params}"
-# }
-
-from_pretrained_kargs = {
-    "pretrained_model_name_or_path": f"./outputs/{preprocessing}_{model_params}/finetuning"
-}
 
 model_arguments = {  # BrainLM/train.py::ModelArguments
     "mask_ratio": 0.75,  # The ratio of the number of masked tokens per brain region.
@@ -52,20 +29,32 @@ model_arguments = {  # BrainLM/train.py::ModelArguments
     "output_attentions": True,
 }
 
-
-def main():
+@click.command()
+@click.argument('inputs-path')
+@click.argument('model-path')
+@click.argument('outputs-path')
+@click.option(
+    '--image-column-name',
+    default="robustscaler_timeseries",
+    help='Column name for the image data. if you use giga connectome, use robustscaler_timeseries, if you use brainlm, use Subtract_Mean_Divide_Global_STD_Normalized_Recording or Voxelwise_RobustScaler_Normalized_Recording.'
+)
+def main(inputs_path, image_column_name, outputs_path, model_path):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    timeseires_to_images_kargs = {
+        "image_column_name": image_column_name,
+        "timeseries_length": timeseries_length, # this is for developmental dataset, full length
+        "max_val_to_scale": None  # max_val_to_scale = 5.6430855  # this is weird.
+    }
 
     def transform_func(batch):
         return timeseires_to_images(batch, **timeseires_to_images_kargs)
-    outputs_path = f"outputs/{preprocessing}_{model_params}"
-    modeltype = "direct_transfer" if len(from_pretrained_kargs) > 1 else "finetuning_transfer"
 
     # load model
-    config = ViTMAEConfig.from_pretrained(**from_pretrained_kargs)
+    config = ViTMAEConfig.from_pretrained(model_path)
     config.update(model_arguments)
     model = ViTMAEForPreTraining.from_pretrained(
-            **from_pretrained_kargs,
+            model_path,
             config=config,
         ).to(device)
 
@@ -74,7 +63,7 @@ def main():
     # multiple train modes (auto-encoder, causal attention, predict last, etc)
     model.config.train_mode = "auto_encode"
 
-    train_ds = load_from_disk(f"data/processed/{preprocessing}/fmri_development.arrow")
+    train_ds = load_from_disk(inputs_path)
     train_ds.set_transform(transform_func)
 
     list_subject_id = []
@@ -131,7 +120,7 @@ def main():
         'padded_recording': all_recordings
     }
     arrow_results = Dataset.from_dict(results)
-    arrow_results.save_to_disk(Path(outputs_path) / f"{modeltype}.arrow")
+    arrow_results.save_to_disk(outputs_path)
 
 
 if __name__ == "__main__":

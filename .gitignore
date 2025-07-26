@@ -1,6 +1,6 @@
-./data/
+data/
 .direnv/
-./models/
+models/
 outputs/
 
 # Byte-compiled / optimized / DLL files
