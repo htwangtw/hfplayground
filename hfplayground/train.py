@@ -71,11 +71,11 @@ def main(inputs_path, image_column_name, outputs_path, model_params):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     replace_vitmae_attn_with_flash_attn()
 
-    config = ViTMAEConfig.from_pretrained(f"./models/vitmae_{model_params}")
+    config = ViTMAEConfig.from_pretrained(f"./models/brainlm/vitmae_{model_params}")
     config.update(model_arguments)
     config.train_mode = "auto_encode"
     model = ViTMAEForPreTraining.from_pretrained(
-            f"./models/vitmae_{model_params}",
+            f"./models/brainlm/vitmae_{model_params}",
             config=config,
         ).to(device)
 

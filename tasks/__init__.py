@@ -1,6 +1,6 @@
 import invoke
 
-from . import prep, notebooks
+from . import prep, notebooks, models
 
 
 @invoke.task
@@ -13,4 +13,5 @@ ns = invoke.Collection()
 
 ns.add_collection(prep, name='prepare')
 ns.add_collection(notebooks)
+ns.add_collection(models)
 ns.add_task(clean)
