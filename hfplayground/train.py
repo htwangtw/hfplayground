@@ -91,7 +91,12 @@ def main(inputs_path, image_column_name, outputs_path, model_params):
     training_args = TrainingArguments(
         output_dir=outputs_path,
         remove_unused_columns=False,
-        include_for_metrics=['inputs']
+        include_for_metrics=['inputs'],
+        logging_steps=1,
+        num_train_epochs=30,
+        learning_rate=5e-05,
+        per_device_eval_batch_size=16,
+        per_device_train_batch_size=16,
     )
     # Initialize our trainer
     trainer = Trainer(

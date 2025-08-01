@@ -28,6 +28,7 @@ git submodule update --init --recursive
 On Rorqual, remember to add module:
 ```
 module add cudacore/.12.6.2
+module load httpproxy
 ```
 With `uv`
 ```

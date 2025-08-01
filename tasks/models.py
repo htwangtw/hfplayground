@@ -17,7 +17,7 @@ def finetune_brainlm(c):
         "--image-column-name Subtract_Mean_Divide_Global_STD_Normalized_Recording "
 
     )
-    
+
     c.run(
         "python -m hfplayground.train "
         "./data/processed/development_fmri.brainlm.arrow "
